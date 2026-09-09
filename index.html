@@ -24,12 +24,16 @@
       border-radius: 12px;
     }
     .card-val {
-      font-size: 3.5rem;
+      font-size: 3rem;
       font-weight: bold;
     }
     .unit-text {
       color: #6c757d;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
+    }
+    .sub-pm-text {
+      font-size: 1.1rem;
+      font-weight: 600;
     }
     .temp-val {
       font-size: 1.8rem;
@@ -41,7 +45,6 @@
       font-weight: bold;
       color: #0dcaf0;
     }
-    /* ปุ่มเลือกโหมดสไตล์ Local เดิม */
     .btn-mode-container {
       display: flex;
       border: 1px solid #ced4da;
@@ -75,15 +78,28 @@
     <!-- Top Cards Layout -->
     <div class="row g-3 mb-4">
       
-      <!-- 1. PM 2.5 Card -->
+      <!-- 1. PM Dust Card (PM 2.5 หลัก + PM 1.0 และ PM 10) -->
       <div class="col-md-4">
         <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
-          <div class="text-dark fw-semibold">PM 2.5</div>
-          <div class="my-auto">
-            <div id="pm25Val" class="card-val text-success">1</div>
-            <div class="unit-text">ug/m³</div>
+          <div class="text-dark fw-semibold">ระดับค่าฝุ่น</div>
+          
+          <!-- PM 2.5 หลัก -->
+          <div class="my-1">
+            <div id="pm25Val" class="card-val text-success">0</div>
+            <div class="unit-text">PM 2.5 (ug/m³)</div>
           </div>
-          <div></div> <!-- Spacer -->
+
+          <!-- PM 1.0 & PM 10 ย่อย -->
+          <div class="row pt-2 border-top">
+            <div class="col-6 border-end">
+              <span class="unit-text d-block">PM 1.0</span>
+              <span id="pm10Val" class="sub-pm-text text-primary">0</span> <small class="unit-text">ug/m³</small>
+            </div>
+            <div class="col-6">
+              <span class="unit-text d-block">PM 10</span>
+              <span id="pm100Val" class="sub-pm-text text-warning">0</span> <small class="unit-text">ug/m³</small>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -92,25 +108,23 @@
         <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
           <div class="text-dark fw-semibold">อุณหภูมิ / ความชื้น</div>
           <div class="my-auto">
-            <div id="tempVal" class="temp-val mb-1">30.8 °C</div>
-            <div id="humidVal" class="humid-val">73.5 %</div>
+            <div id="tempVal" class="temp-val mb-1">0.0 °C</div>
+            <div id="humidVal" class="humid-val">0.0 %</div>
           </div>
-          <div></div> <!-- Spacer -->
+          <div></div>
         </div>
       </div>
 
-      <!-- 3. Control Card (ปรับโครงสร้างเดิม โดยเอาปุ่มเปิด/ปิดออก) -->
+      <!-- 3. Control Card -->
       <div class="col-md-4">
         <div class="card p-3 text-center shadow-sm h-100">
           <div class="text-dark fw-semibold mb-3">ควบคุมการทำงาน</div>
           
-          <!-- AUTO / MANUAL Mode Buttons -->
           <div class="btn-mode-container mb-3">
             <button id="btnAuto" class="btn-mode active" onclick="setMode(true)">AUTO</button>
             <button id="btnManual" class="btn-mode" onclick="setMode(false)">MANUAL</button>
           </div>
 
-          <!-- Fan Speed Slider -->
           <div class="mt-2">
             <input type="range" class="form-range" id="fanSlider" min="0" max="100" value="0" oninput="updateSpeedLabel(this.value)" onchange="setFanSpeed(this.value)">
             <div class="text-center mt-2">
@@ -140,22 +154,42 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    // ===== 2. Chart.js Initialization =====
+    // ===== 2. Chart.js Initialization (รองรับทั้ง PM1.0, PM2.5, PM10) =====
     const ctx = document.getElementById('logChart').getContext('2d');
     const logChart = new Chart(ctx, {
       type: 'line',
       data: {
         labels: [],
-        datasets: [{
-          label: 'PM 2.5 (ug/m³)',
-          data: [],
-          borderColor: '#28a745',
-          backgroundColor: 'rgba(40, 167, 69, 0.05)',
-          borderWidth: 2,
-          pointRadius: 0,
-          fill: true,
-          tension: 0.1
-        }]
+        datasets: [
+          {
+            label: 'PM 2.5',
+            data: [],
+            borderColor: '#28a745',
+            backgroundColor: 'rgba(40, 167, 69, 0.05)',
+            borderWidth: 2,
+            pointRadius: 2,
+            fill: true,
+            tension: 0.2
+          },
+          {
+            label: 'PM 1.0',
+            data: [],
+            borderColor: '#0d6efd',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false,
+            tension: 0.2
+          },
+          {
+            label: 'PM 10',
+            data: [],
+            borderColor: '#ffc107',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false,
+            tension: 0.2
+          }
+        ]
       },
       options: {
         responsive: true,
@@ -163,7 +197,6 @@
         scales: {
           y: {
             beginAtZero: true,
-            max: 1.0,
             grid: { color: '#e9ecef' }
           },
           x: {
@@ -179,7 +212,7 @@
       }
     });
 
-    // ===== 3. Web Dashboard Action Functions =====
+    // ===== 3. Control Functions =====
     function setMode(isAuto) {
       database.ref('/air_purifier/control/isAuto').set(isAuto);
     }
@@ -208,20 +241,24 @@
       }
     }
 
-    // ===== 4. Realtime Data Listeners from Firebase =====
+    // ===== 4. Realtime Data Listeners =====
     
-    // ฟังค่า Live Sensor
+    // ฟังค่า Live Data (PM1.0, PM2.5, PM10)
     database.ref('/air_purifier/live').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        // อัปเดต PM2.5
-        const pmVal = data.pm25 !== undefined ? data.pm25 : 0;
+        // อัปเดตค่า PM2.5
+        const pm25 = data.pm25 !== undefined ? data.pm25 : 0;
         const pmElem = document.getElementById('pm25Val');
-        pmElem.innerText = pmVal;
+        pmElem.innerText = pm25;
 
-        if (pmVal <= 15) pmElem.className = "card-val text-success";
-        else if (pmVal <= 37) pmElem.className = "card-val text-warning";
+        if (pm25 <= 15) pmElem.className = "card-val text-success";
+        else if (pm25 <= 37) pmElem.className = "card-val text-warning";
         else pmElem.className = "card-val text-danger";
+
+        // อัปเดตค่า PM1.0 และ PM10
+        document.getElementById('pm10Val').innerText = data.pm10 !== undefined ? data.pm10 : 0;
+        document.getElementById('pm100Val').innerText = data.pm100 !== undefined ? data.pm100 : 0;
 
         // อัปเดต Temp & Humid
         document.getElementById('tempVal').innerText = (data.temp ? data.temp.toFixed(1) : "0.0") + " °C";
@@ -229,7 +266,7 @@
       }
     });
 
-    // ฟังค่า Control ซิงค์ UI ปุ่มกด
+    // ฟังค่า Control
     database.ref('/air_purifier/control').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -241,21 +278,26 @@
       }
     });
 
-    // โหลดข้อมูล Data Logging ทำกราฟ
+    // ฟังค่า Data Logging
     database.ref('/air_purifier/logs').limitToLast(20).on('value', (snapshot) => {
       const logs = snapshot.val();
       if (logs) {
         const labels = [];
         const pm25Data = [];
-        let index = 1;
+        const pm10Data = [];
+        const pm100Data = [];
         
         Object.keys(logs).forEach((key) => {
-          labels.push(""); // ปล่อย Label ว่างตามดีไซน์กราฟเดิม
-          pm25Data.push(logs[key].pm25);
+          labels.push("");
+          pm25Data.push(logs[key].pm25 || 0);
+          pm10Data.push(logs[key].pm10 || 0);
+          pm100Data.push(logs[key].pm100 || 0);
         });
 
         logChart.data.labels = labels;
         logChart.data.datasets[0].data = pm25Data;
+        logChart.data.datasets[1].data = pm10Data;
+        logChart.data.datasets[2].data = pm100Data;
         logChart.update();
       }
     });
