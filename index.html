@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Air Purifier Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        body { background-color: #f4f6f9; font-family: sans-serif; }
+        .card-dash { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .val-big { font-size: 3.5rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="container py-4">
+    <h2 class="text-center fw-bold mb-4">SMART AIR PURIFIER (CLOUD)</h2>
+    
+    <div class="row g-3 text-center mb-4">
+        <div class="col-md-4">
+            <div class="card-dash">
+                <h5>PM 2.5</h5>
+                <div id="pm25-val" class="val-big text-success">0</div>
+                <span>ug/m³</span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-dash">
+                <h5>อุณหภูมิ / ความชื้น</h5>
+                <h3 id="temp-val" class="text-danger mt-3">-- °C</h3>
+                <h3 id="humid-val" class="text-info">-- %</h3>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-dash">
+                <h5>ควบคุมการทำงาน</h5>
+                <button id="power-btn" onclick="togglePower()" class="btn btn-danger w-100 my-2">เปิด/ปิด เครื่อง</button>
+                <div class="btn-group w-100 mb-2">
+                    <button onclick="setMode(true)" class="btn btn-outline-primary">AUTO</button>
+                    <button onclick="setMode(false)" class="btn btn-outline-secondary">MANUAL</button>
+                </div>
+                <input type="range" class="form-range" id="speed-slider" min="0" max="100" onchange="setSpeed(this.value)">
+                <div>ความเร็วพัดลม: <span id="speed-val">0</span>%</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- กราฟย้อนหลัง -->
+    <div class="card-dash">
+        <h5 class="fw-bold mb-3">ประวัติค่าฝุ่นย้อนหลัง (Data Logging)</h5>
+        <canvas id="historyChart" height="100"></canvas>
+    </div>
+</div>
+
+<script>
+    // Config ค่า Firebase จาก Console ของคุณ
+    const firebaseConfig = {
+        databaseURL: "https://diy-air-purifier-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let isPowerOn = true;
+
+    // ดึงข้อมูล Realtime จาก Firebase
+    db.ref('/air_purifier/live').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if(!data) return;
+
+        document.getElementById('pm25-val').innerText = data.pm25;
+        document.getElementById('temp-val').innerText = data.temp.toFixed(1) + ' °C';
+        document.getElementById('humid-val').innerText = data.humid.toFixed(1) + ' %';
+        document.getElementById('speed-val').innerText = data.fanSpeed;
+        document.getElementById('speed-slider').value = data.fanSpeed;
+        isPowerOn = data.isPowerOn;
+    });
+
+    // ฟังชันควบคุม
+    function togglePower() {
+        db.ref('/air_purifier/control/isPowerOn').set(!isPowerOn);
+    }
+    function setMode(autoState) {
+        db.ref('/air_purifier/control/isAuto').set(autoState);
+    }
+    function setSpeed(val) {
+        db.ref('/air_purifier/control/isAuto').set(false);
+        db.ref('/air_purifier/control/fanSpeed').set(parseInt(val));
+    }
+
+    // ทำกราฟแสดงประวัติย้อนหลัง (Chart.js)
+    const ctx = document.getElementById('historyChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'PM 2.5 (ug/m³)', data: [], borderColor: '#28a745', fill: false }] }
+    });
+
+    // ดึง Log จาก Firebase มาวาดกราฟ
+    db.ref('/air_purifier/logs').limitToLast(20).on('value', (snapshot) => {
+        const logs = snapshot.val();
+        const labels = [];
+        const data = [];
+        let index = 1;
+
+        for(let id in logs) {
+            labels.push('ครั้งที่ ' + index++);
+            data.push(logs[id].pm25);
+        }
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = data;
+        chart.update();
+    });
+</script>
+</body>
+</html>
