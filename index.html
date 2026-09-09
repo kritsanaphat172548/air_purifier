@@ -15,66 +15,124 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <style>
-    body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    .card-val { font-size: 2.5rem; font-weight: bold; }
-    .btn-group .btn.active { font-weight: bold; }
+    body {
+      background-color: #f4f6f9;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .card {
+      border: none;
+      border-radius: 12px;
+    }
+    .card-val {
+      font-size: 3.5rem;
+      font-weight: bold;
+    }
+    .unit-text {
+      color: #6c757d;
+      font-size: 0.9rem;
+    }
+    .temp-val {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: #dc3545;
+    }
+    .humid-val {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: #0dcaf0;
+    }
+    /* ปุ่มเลือกโหมดสไตล์ Local เดิม */
+    .btn-mode-container {
+      display: flex;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .btn-mode {
+      flex: 1;
+      border: none;
+      background: #ffffff;
+      color: #0d6efd;
+      padding: 8px 0;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .btn-mode.active {
+      background-color: #0d6efd;
+      color: #ffffff;
+    }
+    .btn-mode:first-child {
+      border-right: 1px solid #ced4da;
+    }
   </style>
 </head>
 <body>
 
-  <div class="container py-4">
-    <h3 class="text-center fw-bold mb-4">SMART AIR PURIFIER (CLOUD)</h3>
+  <div class="container py-4" style="max-width: 1000px;">
+    <!-- Title Header -->
+    <h3 class="text-center fw-bold mb-4" style="letter-spacing: 1px;">SMART AIR PURIFIER (CLOUD)</h3>
 
+    <!-- Top Cards Layout -->
     <div class="row g-3 mb-4">
-      <!-- PM 2.5 Display -->
+      
+      <!-- 1. PM 2.5 Card -->
       <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm h-100">
-          <div class="text-muted fw-semibold">PM 2.5</div>
-          <div id="pm25Val" class="card-val text-success my-auto">0</div>
-          <div class="text-muted"><small>ug/m³</small></div>
-        </div>
-      </div>
-
-      <!-- Temp & Humidity Display -->
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm h-100">
-          <div class="text-muted fw-semibold">อุณหภูมิ / ความชื้น</div>
+        <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
+          <div class="text-dark fw-semibold">PM 2.5</div>
           <div class="my-auto">
-            <div id="tempVal" class="fs-3 fw-bold text-danger">0.0 °C</div>
-            <div id="humidVal" class="fs-4 fw-bold text-info">0.0 %</div>
+            <div id="pm25Val" class="card-val text-success">1</div>
+            <div class="unit-text">ug/m³</div>
           </div>
+          <div></div> <!-- Spacer -->
         </div>
       </div>
 
-      <!-- Control Box (ตัดปุ่มเปิดปิด ออกแล้ว) -->
+      <!-- 2. Temp / Humid Card -->
       <div class="col-md-4">
-        <div class="card p-3 shadow-sm h-100">
-          <div class="text-muted fw-semibold text-center mb-3">ควบคุมการทำงาน</div>
+        <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
+          <div class="text-dark fw-semibold">อุณหภูมิ / ความชื้น</div>
+          <div class="my-auto">
+            <div id="tempVal" class="temp-val mb-1">30.8 °C</div>
+            <div id="humidVal" class="humid-val">73.5 %</div>
+          </div>
+          <div></div> <!-- Spacer -->
+        </div>
+      </div>
+
+      <!-- 3. Control Card (ปรับโครงสร้างเดิม โดยเอาปุ่มเปิด/ปิดออก) -->
+      <div class="col-md-4">
+        <div class="card p-3 text-center shadow-sm h-100">
+          <div class="text-dark fw-semibold mb-3">ควบคุมการทำงาน</div>
           
-          <div class="btn-group w-100 mb-3" role="group">
-            <button type="button" id="btnAuto" class="btn btn-outline-primary" onclick="setMode(true)">AUTO</button>
-            <button type="button" id="btnManual" class="btn btn-outline-primary" onclick="setMode(false)">MANUAL</button>
+          <!-- AUTO / MANUAL Mode Buttons -->
+          <div class="btn-mode-container mb-3">
+            <button id="btnAuto" class="btn-mode active" onclick="setMode(true)">AUTO</button>
+            <button id="btnManual" class="btn-mode" onclick="setMode(false)">MANUAL</button>
           </div>
 
+          <!-- Fan Speed Slider -->
           <div class="mt-2">
             <input type="range" class="form-range" id="fanSlider" min="0" max="100" value="0" oninput="updateSpeedLabel(this.value)" onchange="setFanSpeed(this.value)">
-            <div class="text-center">
-              <small class="text-muted">ความเร็วพัดลม: <span id="speedLabel" class="fw-bold">0</span>%</small>
+            <div class="text-center mt-2">
+              <small class="text-dark">ความเร็วพัดลม: <span id="speedLabel">0</span>%</small>
             </div>
           </div>
         </div>
       </div>
+
     </div>
 
-    <!-- Data Logging Chart -->
-    <div class="card p-3 shadow-sm">
-      <h6 class="fw-bold text-muted mb-3">ประวัติค่าฝุ่นย้อนหลัง (Data Logging)</h6>
-      <canvas id="logChart" height="100"></canvas>
+    <!-- Data Logging Chart Card -->
+    <div class="card p-4 shadow-sm">
+      <h6 class="fw-bold text-dark mb-3">ประวัติค่าฝุ่นย้อนหลัง (Data Logging)</h6>
+      <div style="position: relative; height:280px;">
+        <canvas id="logChart"></canvas>
+      </div>
     </div>
   </div>
 
   <script>
-    // ===== ตั้งค่า Firebase Config =====
+    // ===== 1. Firebase Configuration =====
     const firebaseConfig = {
       databaseURL: "https://diy-air-purifier-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
@@ -82,7 +140,7 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    // Chart.js Setup
+    // ===== 2. Chart.js Initialization =====
     const ctx = document.getElementById('logChart').getContext('2d');
     const logChart = new Chart(ctx, {
       type: 'line',
@@ -92,15 +150,36 @@
           label: 'PM 2.5 (ug/m³)',
           data: [],
           borderColor: '#28a745',
-          backgroundColor: 'rgba(40, 167, 69, 0.1)',
+          backgroundColor: 'rgba(40, 167, 69, 0.05)',
+          borderWidth: 2,
+          pointRadius: 0,
           fill: true,
-          tension: 0.3
+          tension: 0.1
         }]
       },
-      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 1.0,
+            grid: { color: '#e9ecef' }
+          },
+          x: {
+            grid: { display: false }
+          }
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          }
+        }
+      }
     });
 
-    // ===== การสั่งงานควบคุมไปที่ Firebase =====
+    // ===== 3. Web Dashboard Action Functions =====
     function setMode(isAuto) {
       database.ref('/air_purifier/control/isAuto').set(isAuto);
     }
@@ -119,33 +198,38 @@
       const slider = document.getElementById('fanSlider');
 
       if (isAuto) {
-        btnAuto.className = "btn btn-primary active";
-        btnManual.className = "btn btn-outline-primary";
+        btnAuto.classList.add('active');
+        btnManual.classList.remove('active');
         slider.disabled = true;
       } else {
-        btnAuto.className = "btn btn-outline-primary";
-        btnManual.className = "btn btn-primary active";
+        btnManual.classList.add('active');
+        btnAuto.classList.remove('active');
         slider.disabled = false;
       }
     }
 
-    // ===== ฟังค่า Realtime Data จาก Firebase =====
+    // ===== 4. Realtime Data Listeners from Firebase =====
+    
+    // ฟังค่า Live Sensor
     database.ref('/air_purifier/live').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        document.getElementById('pm25Val').innerText = data.pm25 || 0;
+        // อัปเดต PM2.5
+        const pmVal = data.pm25 !== undefined ? data.pm25 : 0;
+        const pmElem = document.getElementById('pm25Val');
+        pmElem.innerText = pmVal;
+
+        if (pmVal <= 15) pmElem.className = "card-val text-success";
+        else if (pmVal <= 37) pmElem.className = "card-val text-warning";
+        else pmElem.className = "card-val text-danger";
+
+        // อัปเดต Temp & Humid
         document.getElementById('tempVal').innerText = (data.temp ? data.temp.toFixed(1) : "0.0") + " °C";
         document.getElementById('humidVal').innerText = (data.humid ? data.humid.toFixed(1) : "0.0") + " %";
-
-        // สีตัวเลขตามระดับค่าฝุ่น
-        const pmElem = document.getElementById('pm25Val');
-        if (data.pm25 <= 15) pmElem.className = "card-val text-success my-auto";
-        else if (data.pm25 <= 37) pmElem.className = "card-val text-warning my-auto";
-        else pmElem.className = "card-val text-danger my-auto";
       }
     });
 
-    // ฟังค่า Control ซิงค์ปุ่มบนหน้าเว็บ
+    // ฟังค่า Control ซิงค์ UI ปุ่มกด
     database.ref('/air_purifier/control').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -157,17 +241,19 @@
       }
     });
 
-    // โหลดประวัติ Data Logs
-    database.ref('/air_purifier/logs').limitToLast(15).on('value', (snapshot) => {
+    // โหลดข้อมูล Data Logging ทำกราฟ
+    database.ref('/air_purifier/logs').limitToLast(20).on('value', (snapshot) => {
       const logs = snapshot.val();
       if (logs) {
         const labels = [];
         const pm25Data = [];
-        let count = 1;
+        let index = 1;
+        
         Object.keys(logs).forEach((key) => {
-          labels.push("Log " + count++);
+          labels.push(""); // ปล่อย Label ว่างตามดีไซน์กราฟเดิม
           pm25Data.push(logs[key].pm25);
         });
+
         logChart.data.labels = labels;
         logChart.data.datasets[0].data = pm25Data;
         logChart.update();
