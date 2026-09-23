@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SMART AIR PURIFIER (CLOUD)</title>
+  <title>SMART AIR PURIFIER & PM2.5 MONITOR</title>
   
-  <!-- Bootstrap 5 CSS -->
+  <!-- Bootstrap 5 CSS & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -77,7 +79,7 @@
       border-radius: 20px;
     }
 
-    /* ===== สไตล์ส่วนแสดงสถานะคุณภาพอากาศที่เพิ่มเข้ามา ===== */
+    /* สถานะคุณภาพอากาศ Avatar & Pill */
     .aqi-avatar {
       width: 80px;
       height: 80px;
@@ -99,120 +101,207 @@
       color: #ffffff;
       transition: all 0.3s ease;
     }
+
+    /* สไตล์กรอบ iframe สำหรับ GISTDA */
+    .iframe-container {
+      position: relative;
+      width: 100%;
+      height: 78vh;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      background-color: #ffffff;
+    }
+    .iframe-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
   </style>
 </head>
 <body>
 
-  <div class="container py-4" style="max-width: 1000px;">
-    <!-- Title Header + Status Badge -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h3 class="fw-bold m-0" style="letter-spacing: 1px;">SMART AIR PURIFIER (CLOUD)</h3>
-      <span id="connectionStatus" class="badge bg-secondary status-badge">⚪ ตรวจสอบสถานะ ESP32...</span>
+  <!-- ===== แถบเมนูด้านบน (NAVBAR) ===== -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm mb-4">
+    <div class="container" style="max-width: 1000px;">
+      <a class="navbar-brand fw-bold" href="#">
+        <i class="bi bi-wind text-info me-2"></i>SMART PURIFIER
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <button class="nav-link active px-3" id="tabDevice" onclick="switchTab('device')">
+              <i class="bi bi-cpu me-1"></i> แดชบอร์ดเครื่องฟอก
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link px-3" id="tabGistda" onclick="switchTab('gistda')">
+              <i class="bi bi-map me-1"></i> ติดตาม PM 2.5 (GISTDA)
+            </button>
+          </li>
+        </ul>
+      </div>
     </div>
+  </nav>
 
-    <!-- Top Cards Layout -->
-    <div class="row g-3 mb-4">
-      
-      <!-- 1. PM Dust Card + Air Quality Status -->
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
-          <div class="text-dark fw-semibold">ระดับค่าฝุ่นปัจจุบัน</div>
+  <div class="container pb-5" style="max-width: 1000px;">
 
-          <!-- ส่วนแสดงรูปสถานะคุณภาพอากาศ (เพิ่มเข้ามา) -->
-          <div class="my-2">
-            <div id="aqiAvatar" class="aqi-avatar">😊</div>
-            <div id="aqiPill" class="aqi-pill bg-success">คุณภาพอากาศดีมาก</div>
-          </div>
-          
-          <!-- PM 2.5 หลัก -->
-          <div class="my-1">
-            <div id="pm25Val" class="card-val text-success">0</div>
-            <div class="unit-text">PM 2.5 (ug/m³)</div>
-          </div>
+    <!-- ================= 1. หน้าแดชบอร์ดอุปกรณ์ (DEVICE SECTION) ================= -->
+    <div id="deviceSection">
+      <!-- Title Header + Status Badge -->
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold m-0 text-dark">ระบบควบคุมเครื่องฟอกอากาศ</h4>
+        <span id="connectionStatus" class="badge bg-secondary status-badge">⚪ ตรวจสอบสถานะ ESP32...</span>
+      </div>
 
-          <!-- PM 1.0 & PM 10 ย่อย -->
-          <div class="row pt-2 border-top">
-            <div class="col-6 border-end">
-              <span class="unit-text d-block">PM 1.0</span>
-              <span id="pm10Val" class="sub-pm-text text-primary">0</span> <small class="unit-text">ug/m³</small>
+      <!-- Top Cards Layout -->
+      <div class="row g-3 mb-4">
+        
+        <!-- 1. PM Dust Card + Air Quality Status -->
+        <div class="col-md-4">
+          <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
+            <div class="text-dark fw-semibold">ระดับค่าฝุ่นปัจจุบัน</div>
+
+            <!-- ส่วนแสดงรูปสถานะคุณภาพอากาศ -->
+            <div class="my-2">
+              <div id="aqiAvatar" class="aqi-avatar">😊</div>
+              <div id="aqiPill" class="aqi-pill bg-success">คุณภาพอากาศดีมาก</div>
             </div>
-            <div class="col-6">
-              <span class="unit-text d-block">PM 10</span>
-              <span id="pm100Val" class="sub-pm-text text-warning">0</span> <small class="unit-text">ug/m³</small>
+            
+            <!-- PM 2.5 หลัก -->
+            <div class="my-1">
+              <div id="pm25Val" class="card-val text-success">0</div>
+              <div class="unit-text">PM 2.5 (ug/m³)</div>
+            </div>
+
+            <!-- PM 1.0 & PM 10 ย่อย -->
+            <div class="row pt-2 border-top">
+              <div class="col-6 border-end">
+                <span class="unit-text d-block">PM 1.0</span>
+                <span id="pm10Val" class="sub-pm-text text-primary">0</span> <small class="unit-text">ug/m³</small>
+              </div>
+              <div class="col-6">
+                <span class="unit-text d-block">PM 10</span>
+                <span id="pm100Val" class="sub-pm-text text-warning">0</span> <small class="unit-text">ug/m³</small>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 2. Temp / Humid Card -->
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
-          <div class="text-dark fw-semibold">อุณหภูมิ / ความชื้น</div>
-          <div class="my-auto">
-            <div id="tempVal" class="temp-val mb-1">0.0 °C</div>
-            <div id="humidVal" class="humid-val">0.0 %</div>
+        <!-- 2. Temp / Humid Card -->
+        <div class="col-md-4">
+          <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
+            <div class="text-dark fw-semibold">อุณหภูมิ / ความชื้น</div>
+            <div class="my-auto">
+              <div id="tempVal" class="temp-val mb-1">0.0 °C</div>
+              <div id="humidVal" class="humid-val">0.0 %</div>
+            </div>
+            <div></div>
           </div>
-          <div></div>
         </div>
-      </div>
 
-      <!-- 3. Control Card -->
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm h-100">
-          <div class="text-dark fw-semibold mb-3">ควบคุมการทำงาน</div>
-          
-          <div class="btn-mode-container mb-3">
-            <button id="btnAuto" class="btn-mode active" onclick="setMode(true)">AUTO</button>
-            <button id="btnManual" class="btn-mode" onclick="setMode(false)">MANUAL</button>
-          </div>
+        <!-- 3. Control Card -->
+        <div class="col-md-4">
+          <div class="card p-3 text-center shadow-sm h-100">
+            <div class="text-dark fw-semibold mb-3">ควบคุมการทำงาน</div>
+            
+            <div class="btn-mode-container mb-3">
+              <button id="btnAuto" class="btn-mode active" onclick="setMode(true)">AUTO</button>
+              <button id="btnManual" class="btn-mode" onclick="setMode(false)">MANUAL</button>
+            </div>
 
-          <div class="mt-2">
-            <input type="range" class="form-range" id="fanSlider" min="0" max="100" value="0" oninput="updateSpeedLabel(this.value)" onchange="setFanSpeed(this.value)">
-            <div class="text-center mt-2">
-              <small class="text-dark">ความเร็วพัดลม: <span id="speedLabel">0</span>%</small>
+            <div class="mt-2">
+              <input type="range" class="form-range" id="fanSlider" min="0" max="100" value="0" oninput="updateSpeedLabel(this.value)" onchange="setFanSpeed(this.value)">
+              <div class="text-center mt-2">
+                <small class="text-dark">ความเร็วพัดลม: <span id="speedLabel">0</span>%</small>
+              </div>
             </div>
           </div>
         </div>
+
       </div>
 
+      <!-- Dust Statistics Cards Section -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <div class="card p-3 text-center shadow-sm bg-white">
+            <div class="unit-text fw-semibold text-uppercase">PM 2.5 เฉลี่ย</div>
+            <div id="statAvg" class="stat-val text-primary my-1">0</div>
+            <div class="unit-text">ug/m³</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-3 text-center shadow-sm bg-white">
+            <div class="unit-text fw-semibold text-uppercase">PM 2.5 สูงสุด (MAX)</div>
+            <div id="statMax" class="stat-val text-danger my-1">0</div>
+            <div class="unit-text">ug/m³</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-3 text-center shadow-sm bg-white">
+            <div class="unit-text fw-semibold text-uppercase">PM 2.5 ต่ำสุด (MIN)</div>
+            <div id="statMin" class="stat-val text-success my-1">0</div>
+            <div class="unit-text">ug/m³</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Logging Chart Card -->
+      <div class="card p-4 shadow-sm">
+        <h6 class="fw-bold text-dark mb-3">ประวัติค่าฝุ่นย้อนหลัง (Data Logging)</h6>
+        <div style="position: relative; height:280px;">
+          <canvas id="logChart"></canvas>
+        </div>
+      </div>
     </div>
 
-    <!-- Dust Statistics Cards Section -->
-    <div class="row g-3 mb-4">
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm bg-white">
-          <div class="unit-text fw-semibold text-uppercase">PM 2.5 เฉลี่ย</div>
-          <div id="statAvg" class="stat-val text-primary my-1">0</div>
-          <div class="unit-text">ug/m³</div>
+    <!-- ================= 2. หน้าติดตามฝุ่น GISTDA (GISTDA SECTION) ================= -->
+    <div id="gistdaSection" style="display: none;">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h4 class="fw-bold m-0 text-dark">เช็คค่าฝุ่น PM 2.5 รายวัน/รายชั่วโมง ประเทศไทย</h4>
+          <small class="text-muted">ข้อมูลเรียลไทม์จาก สำนักงานพัฒนาเทคโนโลยีอวกาศและภูมิสารสนเทศ (GISTDA)</small>
         </div>
+        <a href="https://pm25.gistda.or.th/" target="_blank" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-box-arrow-up-right me-1"></i> เปิดหน้าเว็บเต็ม
+        </a>
       </div>
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm bg-white">
-          <div class="unit-text fw-semibold text-uppercase">PM 2.5 สูงสุด (MAX)</div>
-          <div id="statMax" class="stat-val text-danger my-1">0</div>
-          <div class="unit-text">ug/m³</div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm bg-white">
-          <div class="unit-text fw-semibold text-uppercase">PM 2.5 ต่ำสุด (MIN)</div>
-          <div id="statMin" class="stat-val text-success my-1">0</div>
-          <div class="unit-text">ug/m³</div>
-        </div>
+
+      <div class="iframe-container">
+        <iframe src="https://pm25.gistda.or.th/" title="GISTDA PM2.5 Realtime Tracking"></iframe>
       </div>
     </div>
 
-    <!-- Data Logging Chart Card -->
-    <div class="card p-4 shadow-sm">
-      <h6 class="fw-bold text-dark mb-3">ประวัติค่าฝุ่นย้อนหลัง (Data Logging)</h6>
-      <div style="position: relative; height:280px;">
-        <canvas id="logChart"></canvas>
-      </div>
-    </div>
   </div>
 
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
-    // ===== 1. Firebase Configuration =====
+    // ===== 1. Navigation Tab Switching =====
+    function switchTab(tabName) {
+      const deviceSec = document.getElementById('deviceSection');
+      const gistdaSec = document.getElementById('gistdaSection');
+      const tabDevice = document.getElementById('tabDevice');
+      const tabGistda = document.getElementById('tabGistda');
+
+      if (tabName === 'device') {
+        deviceSec.style.display = 'block';
+        gistdaSec.style.display = 'none';
+        tabDevice.classList.add('active');
+        tabGistda.classList.remove('active');
+      } else if (tabName === 'gistda') {
+        deviceSec.style.display = 'none';
+        gistdaSec.style.display = 'block';
+        tabGistda.classList.add('active');
+        tabDevice.classList.remove('active');
+      }
+    }
+
+    // ===== 2. Firebase Configuration =====
     const firebaseConfig = {
       databaseURL: "https://diy-air-purifier-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
@@ -220,7 +309,7 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    // ===== 2. ESP32 Connection Monitor (Heartbeat) =====
+    // ===== 3. ESP32 Connection Monitor (Heartbeat) =====
     let lastSeenTime = 0;
     const offlineTimeoutMs = 10000;
 
@@ -237,7 +326,7 @@
       }
     }, 3000);
 
-    // ===== 3. Chart.js Initialization =====
+    // ===== 4. Chart.js Initialization =====
     const ctx = document.getElementById('logChart').getContext('2d');
     const logChart = new Chart(ctx, {
       type: 'line',
@@ -278,24 +367,16 @@
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-          y: {
-            beginAtZero: true,
-            grid: { color: '#e9ecef' }
-          },
-          x: {
-            grid: { display: false }
-          }
+          y: { beginAtZero: true, grid: { color: '#e9ecef' } },
+          x: { grid: { display: false } }
         },
         plugins: {
-          legend: {
-            display: true,
-            position: 'top'
-          }
+          legend: { display: true, position: 'top' }
         }
       }
     });
 
-    // ===== 4. Control Functions =====
+    // ===== 5. Control Functions =====
     function setMode(isAuto) {
       database.ref('/air_purifier/control/isAuto').set(isAuto);
     }
@@ -324,51 +405,44 @@
       }
     }
 
-    // ===== 5. Air Quality UI Update Helper (ปรับระดับคุณภาพอากาศ) =====
+    // ===== 6. Air Quality UI Update Helper =====
     function updateAirQualityUI(pm25) {
       const avatar = document.getElementById('aqiAvatar');
       const pill = document.getElementById('aqiPill');
       const pmElem = document.getElementById('pm25Val');
 
       if (pm25 <= 15) {
-        // คุณภาพอากาศดีมาก (0 - 15.0)
         avatar.innerText = "😊";
         pill.innerText = "คุณภาพอากาศดีมาก";
-        pill.style.backgroundColor = "#28a745"; // สีเขียว
+        pill.style.backgroundColor = "#28a745";
         pmElem.className = "card-val text-success";
       } else if (pm25 <= 37.5) {
-        // คุณภาพอากาศดี (15.1 - 37.5)
         avatar.innerText = "🙂";
         pill.innerText = "คุณภาพอากาศดี";
-        pill.style.backgroundColor = "#9ec55d"; // สีเขียวอ่อนตามรูปภาพตัวอย่าง
+        pill.style.backgroundColor = "#9ec55d";
         pmElem.className = "card-val text-success";
       } else if (pm25 <= 75) {
-        // ปานกลาง (37.6 - 75.0)
         avatar.innerText = "😐";
         pill.innerText = "ปานกลาง";
-        pill.style.backgroundColor = "#ffc107"; // สีเหลือง
+        pill.style.backgroundColor = "#ffc107";
         pill.style.color = "#000000";
         pmElem.className = "card-val text-warning";
       } else if (pm25 <= 150) {
-        // เริ่มมีผลกระทบต่อสุขภาพ (75.1 - 150.0)
         avatar.innerText = "😷";
         pill.innerText = "เริ่มมีผลกระทบต่อสุขภาพ";
-        pill.style.backgroundColor = "#fd7e14"; // สีส้ม
+        pill.style.backgroundColor = "#fd7e14";
         pill.style.color = "#ffffff";
         pmElem.className = "card-val text-danger";
       } else {
-        // มีผลกระทบต่อสุขภาพ (> 150.0)
         avatar.innerText = "😱";
         pill.innerText = "มีผลกระทบต่อสุขภาพ";
-        pill.style.backgroundColor = "#dc3545"; // สีแดง
+        pill.style.backgroundColor = "#dc3545";
         pill.style.color = "#ffffff";
         pmElem.className = "card-val text-danger";
       }
     }
 
-    // ===== 6. Realtime Data Listeners =====
-    
-    // ฟังค่า Live Data จาก ESP32
+    // ===== 7. Realtime Data Listeners =====
     database.ref('/air_purifier/live').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -378,24 +452,19 @@
         statusElem.className = "badge bg-success status-badge";
         statusElem.innerText = "🟢 ESP32 ออนไลน์";
 
-        // อัปเดตค่า PM2.5 และเปลี่ยนสถานะคุณภาพอากาศ
         const pm25 = data.pm25 !== undefined ? data.pm25 : 0;
         document.getElementById('pm25Val').innerText = pm25;
         
-        // เรียกฟังก์ชันอัปเดตไอคอนและป้ายสถานะคุณภาพอากาศ
         updateAirQualityUI(pm25);
 
-        // อัปเดตค่า PM1.0 และ PM10
         document.getElementById('pm10Val').innerText = data.pm10 !== undefined ? data.pm10 : 0;
         document.getElementById('pm100Val').innerText = data.pm100 !== undefined ? data.pm100 : 0;
 
-        // อัปเดต Temp & Humid
         document.getElementById('tempVal').innerText = (data.temp ? data.temp.toFixed(1) : "0.0") + " °C";
         document.getElementById('humidVal').innerText = (data.humid ? data.humid.toFixed(1) : "0.0") + " %";
       }
     });
 
-    // ฟังค่า Control
     database.ref('/air_purifier/control').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -407,7 +476,6 @@
       }
     });
 
-    // ฟังค่า Data Logging และ คำนวณ STAT (AVG, MAX, MIN)
     database.ref('/air_purifier/logs').limitToLast(30).on('value', (snapshot) => {
       const logs = snapshot.val();
       if (logs) {
@@ -424,14 +492,12 @@
           pm100Data.push(logs[key].pm100 || 0);
         });
 
-        // อัปเดตกราฟ
         logChart.data.labels = labels;
         logChart.data.datasets[0].data = pm25Data;
         logChart.data.datasets[1].data = pm10Data;
         logChart.data.datasets[2].data = pm100Data;
         logChart.update();
 
-        // คำนวณ STAT ค่าฝุ่น PM2.5
         if (pm25Data.length > 0) {
           const sum = pm25Data.reduce((a, b) => a + b, 0);
           const avg = (sum / pm25Data.length).toFixed(1);
