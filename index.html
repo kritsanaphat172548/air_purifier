@@ -84,7 +84,7 @@
     <!-- Title Header + Status Badge -->
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h3 class="fw-bold m-0" style="letter-spacing: 1px;">SMART AIR PURIFIER (CLOUD)</h3>
-      <span id="connectionStatus" class="badge bg-secondary status-badge">⚪ กำลังเชื่อมต่อ...</span>
+      <span id="connectionStatus" class="badge bg-secondary status-badge">⚪ ตรวจสอบสถานะ ESP32...</span>
     </div>
 
     <!-- Top Cards Layout -->
@@ -148,7 +148,7 @@
 
     </div>
 
-    <!-- Dust Statistics Cards Section (เพิ่มใหม่) -->
+    <!-- Dust Statistics Cards Section -->
     <div class="row g-3 mb-4">
       <div class="col-md-4">
         <div class="card p-3 text-center shadow-sm bg-white">
@@ -191,19 +191,22 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    let lastDataTime = 0;
+    // ===== 2. ESP32 Connection Monitor (Heartbeat) =====
+    let lastSeenTime = 0;
+    const offlineTimeoutMs = 10000; // เกิน 10 วินาที ไม่มีข้อมูลส่งมา ถือว่า ESP32 หลุด/ออฟไลน์
 
-    // ===== 2. Connection Status Monitor =====
-    database.ref('.info/connected').on('value', (snap) => {
+    setInterval(() => {
       const statusElem = document.getElementById('connectionStatus');
-      if (snap.val() === true) {
+      const now = Date.now();
+
+      if (lastSeenTime > 0 && (now - lastSeenTime <= offlineTimeoutMs)) {
         statusElem.className = "badge bg-success status-badge";
-        statusElem.innerText = "🟢 ออนไลน์ (Online)";
+        statusElem.innerText = "🟢 ESP32 ออนไลน์";
       } else {
         statusElem.className = "badge bg-danger status-badge";
-        statusElem.innerText = "🔴 ออฟไลน์ (Offline)";
+        statusElem.innerText = "🔴 ESP32 ออฟไลน์ / ขาดการติดต่อ";
       }
-    });
+    }, 3000);
 
     // ===== 3. Chart.js Initialization =====
     const ctx = document.getElementById('logChart').getContext('2d');
@@ -294,11 +297,16 @@
 
     // ===== 5. Realtime Data Listeners =====
     
-    // ฟังค่า Live Data (PM1.0, PM2.5, PM10)
+    // ฟังค่า Live Data จาก ESP32
     database.ref('/air_purifier/live').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        lastDataTime = Date.now(); // บันทึกเวลาที่ได้รับข้อมูลล่าสุด
+        // เมื่อได้รับแพ็กเก็ตใหม่จาก ESP32 ให้ประทับเวลาปัจจุบันทันที
+        lastSeenTime = Date.now();
+
+        const statusElem = document.getElementById('connectionStatus');
+        statusElem.className = "badge bg-success status-badge";
+        statusElem.innerText = "🟢 ESP32 ออนไลน์";
 
         // อัปเดตค่า PM2.5
         const pm25 = data.pm25 !== undefined ? data.pm25 : 0;
@@ -355,7 +363,7 @@
         logChart.data.datasets[2].data = pm100Data;
         logChart.update();
 
-        // คำนวณ STAT PM2.5
+        // คำนวณ STAT ค่าฝุ่น PM2.5
         if (pm25Data.length > 0) {
           const sum = pm25Data.reduce((a, b) => a + b, 0);
           const avg = (sum / pm25Data.length).toFixed(1);
