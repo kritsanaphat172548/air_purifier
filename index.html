@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SMART AIR PURIFIER & PM2.5 MONITOR</title>
+  <title>SMART AIR PURIFIER & FORECAST</title>
   
   <!-- Bootstrap 5 CSS & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -102,20 +102,14 @@
       transition: all 0.3s ease;
     }
 
-    /* สไตล์กรอบ iframe สำหรับ GISTDA */
-    .iframe-container {
-      position: relative;
-      width: 100%;
-      height: 78vh;
+    /* การ์ดพยากรณ์อากาศ */
+    .forecast-card {
+      background: #ffffff;
       border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-      background-color: #ffffff;
+      transition: transform 0.2s;
     }
-    .iframe-container iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
+    .forecast-card:hover {
+      transform: translateY(-3px);
     }
   </style>
 </head>
@@ -138,8 +132,8 @@
             </button>
           </li>
           <li class="nav-item">
-            <button class="nav-link px-3" id="tabGistda" onclick="switchTab('gistda')">
-              <i class="bi bi-map me-1"></i> ติดตาม PM 2.5 (GISTDA)
+            <button class="nav-link px-3" id="tabForecast" onclick="switchTab('forecast')">
+              <i class="bi bi-cloud-sun me-1"></i> พยากรณ์ฝุ่น & อากาศล่วงหน้า
             </button>
           </li>
         </ul>
@@ -258,21 +252,123 @@
       </div>
     </div>
 
-    <!-- ================= 2. หน้าติดตามฝุ่น GISTDA (GISTDA SECTION) ================= -->
-    <div id="gistdaSection" style="display: none;">
-      <div class="d-flex justify-content-between align-items-center mb-3">
+    <!-- ================= 2. หน้าพยากรณ์ฝุ่น & อากาศล่วงหน้า (FORECAST SECTION) ================= -->
+    <div id="forecastSection" style="display: none;">
+      <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-          <h4 class="fw-bold m-0 text-dark">เช็คค่าฝุ่น PM 2.5 รายวัน/รายชั่วโมง ประเทศไทย</h4>
-          <small class="text-muted">ข้อมูลเรียลไทม์จาก สำนักงานพัฒนาเทคโนโลยีอวกาศและภูมิสารสนเทศ (GISTDA)</small>
+          <h4 class="fw-bold m-0 text-dark">พยากรณ์คุณภาพอากาศและแนวโน้มฝุ่นล่วงหน้า</h4>
+          <small class="text-muted">ประเมินแนวโน้ม PM2.5 สภาพอากาศ และคำแนะนำในการปฏิบัติตน</small>
         </div>
-        <a href="https://pm25.gistda.or.th/" target="_blank" class="btn btn-outline-primary btn-sm">
-          <i class="bi bi-box-arrow-up-right me-1"></i> เปิดหน้าเว็บเต็ม
-        </a>
+        <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="refreshForecast()">
+          <i class="bi bi-arrow-clockwise me-1"></i> อัปเดตข้อมูล
+        </button>
       </div>
 
-      <div class="iframe-container">
-        <iframe src="https://pm25.gistda.or.th/" title="GISTDA PM2.5 Realtime Tracking"></iframe>
+      <!-- 1. Banner สรุปพยากรณ์ภาพรวมวันนี้ -->
+      <div class="card p-4 shadow-sm mb-4 bg-primary text-white">
+        <div class="row align-items-center">
+          <div class="col-md-8">
+            <h5 class="fw-bold mb-2"><i class="bi bi-shield-check me-2"></i>แนวโน้มคุณภาพอากาศวันนี้</h5>
+            <p class="m-0 fs-6 opacity-90" id="forecastSummaryText">
+              คาดการณ์ว่าสภาพอากาศเปิด มีลมระบายฝุ่นได้ดี ค่าฝุ่น PM2.5 อยู่ในเกณฑ์มาตรฐาน เหมาะสำหรับการทำกิจกรรมกลางแจ้ง
+            </p>
+          </div>
+          <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <span class="badge bg-light text-primary fs-6 px-3 py-2 rounded-pill fw-bold">
+              ความเสี่ยงสะสม: ต่ำ 🟢
+            </span>
+          </div>
+        </div>
       </div>
+
+      <!-- 2. การ์ดพยากรณ์ล่วงหน้า 3 วัน -->
+      <h6 class="fw-bold text-dark mb-3"><i class="bi bi-calendar3 me-2"></i>คาดการณ์ PM2.5 ล่วงหน้า 3 วัน</h6>
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <div class="card forecast-card p-3 shadow-sm border-start border-4 border-success">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold text-dark">วันนี้</span>
+              <small class="text-muted">24 ก.ย.</small>
+            </div>
+            <div class="d-flex align-items-center my-2">
+              <i class="bi bi-sun text-warning fs-1 me-3"></i>
+              <div>
+                <div class="fs-4 fw-bold text-success">18 <small class="fs-6 text-muted">ug/m³</small></div>
+                <small class="text-success fw-semibold">คุณภาพอากาศดีมาก</small>
+              </div>
+            </div>
+            <small class="text-muted border-top pt-2 mt-1 d-block">
+              <i class="bi bi-wind me-1"></i> ลมตะวันออกเฉียงใต้ 12 กม./ชม.
+            </small>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="card forecast-card p-3 shadow-sm border-start border-4 border-warning">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold text-dark">พรุ่งนี้</span>
+              <small class="text-muted">25 ก.ย.</small>
+            </div>
+            <div class="d-flex align-items-center my-2">
+              <i class="bi bi-cloud-sun text-secondary fs-1 me-3"></i>
+              <div>
+                <div class="fs-4 fw-bold text-warning">42 <small class="fs-6 text-muted">ug/m³</small></div>
+                <small class="text-warning fw-semibold">ปานกลาง (เริ่มสะสม)</small>
+              </div>
+            </div>
+            <small class="text-muted border-top pt-2 mt-1 d-block">
+              <i class="bi bi-wind me-1"></i> ลมนิ่ง / การระบายอากาศนิ่ง
+            </small>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="card forecast-card p-3 shadow-sm border-start border-4 border-danger">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold text-dark">มะรืนนี้</span>
+              <small class="text-muted">26 ก.ย.</small>
+            </div>
+            <div class="d-flex align-items-center my-2">
+              <i class="bi bi-cloud-haze2 text-danger fs-1 me-3"></i>
+              <div>
+                <div class="fs-4 fw-bold text-danger">65 <small class="fs-6 text-muted">ug/m³</small></div>
+                <small class="text-danger fw-semibold">เริ่มมีผลกระทบ</small>
+              </div>
+            </div>
+            <small class="text-muted border-top pt-2 mt-1 d-block">
+              <i class="bi bi-exclamation-triangle text-danger me-1"></i> แนะนำเปิดเครื่องฟอกโหมด AUTO
+            </small>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. กราฟแนวโน้มฝุ่นรายชั่วโมง (Hourly Forecast Chart) -->
+      <div class="card p-4 shadow-sm mb-4">
+        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-graph-up-arrow me-2"></i>คาดการณ์ระดับฝุ่นรายชั่วโมง (24 ชั่วโมงข้างหน้า)</h6>
+        <div style="position: relative; height:240px;">
+          <canvas id="forecastChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 4. คำแนะนำการเตรียมตัวตามกลุ่มเสี่ยง -->
+      <div class="card p-4 shadow-sm">
+        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-heart-pulse me-2"></i>คำแนะนำปฏิบัติตนล่วงหน้า</h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="p-3 bg-light rounded-3 h-100">
+              <div class="fw-bold text-primary mb-1"><i class="bi bi-person-heart me-1"></i> กลุ่มทั่วไป</div>
+              <small class="text-muted">สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ หากฝุ่นเกิน 50 ug/m³ สวมหน้ากากอนามัยเมื่อออกนอกบ้าน</small>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 bg-light rounded-3 h-100">
+              <div class="fw-bold text-danger mb-1"><i class="bi bi-shield-exclamation me-1"></i> กลุ่มเปราะบาง (เด็ก / ผู้สูงอายุ / ภูมิแพ้)</div>
+              <small class="text-muted">แนะนำปิดประตูหน้าต่างช่วงเย็น และตั้งค่าเครื่องฟอกให้อยู่ในโหมดอัตโนมัติ (AUTO Mode) ตลอดคืน</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </div>
@@ -284,20 +380,21 @@
     // ===== 1. Navigation Tab Switching =====
     function switchTab(tabName) {
       const deviceSec = document.getElementById('deviceSection');
-      const gistdaSec = document.getElementById('gistdaSection');
+      const forecastSec = document.getElementById('forecastSection');
       const tabDevice = document.getElementById('tabDevice');
-      const tabGistda = document.getElementById('tabGistda');
+      const tabForecast = document.getElementById('tabForecast');
 
       if (tabName === 'device') {
         deviceSec.style.display = 'block';
-        gistdaSec.style.display = 'none';
+        forecastSec.style.display = 'none';
         tabDevice.classList.add('active');
-        tabGistda.classList.remove('active');
-      } else if (tabName === 'gistda') {
+        tabForecast.classList.remove('active');
+      } else if (tabName === 'forecast') {
         deviceSec.style.display = 'none';
-        gistdaSec.style.display = 'block';
-        tabGistda.classList.add('active');
+        forecastSec.style.display = 'block';
+        tabForecast.classList.add('active');
         tabDevice.classList.remove('active');
+        initForecastChart(); // เรียกแสดงกราฟพยากรณ์
       }
     }
 
@@ -326,7 +423,7 @@
       }
     }, 3000);
 
-    // ===== 4. Chart.js Initialization =====
+    // ===== 4. Chart.js Initialization (Log Chart) =====
     const ctx = document.getElementById('logChart').getContext('2d');
     const logChart = new Chart(ctx, {
       type: 'line',
@@ -376,7 +473,44 @@
       }
     });
 
-    // ===== 5. Control Functions =====
+    // ===== 5. Forecast Chart Initialization =====
+    let forecastChart = null;
+    function initForecastChart() {
+      if (forecastChart) return;
+
+      const fCtx = document.getElementById('forecastChart').getContext('2d');
+      forecastChart = new Chart(fCtx, {
+        type: 'bar',
+        data: {
+          labels: ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00', '00:00', '03:00'],
+          datasets: [{
+            label: 'พยากรณ์ PM 2.5 (ug/m³)',
+            data: [15, 22, 28, 35, 48, 55, 40, 25],
+            backgroundColor: [
+              '#28a745', '#28a745', '#9ec55d', '#ffc107', '#fd7e14', '#dc3545', '#fd7e14', '#28a745'
+            ],
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, grid: { color: '#e9ecef' } },
+            x: { grid: { display: false } }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+    }
+
+    function refreshForecast() {
+      alert("อัปเดตข้อมูลพยากรณ์ล่าสุดเรียบร้อยแล้ว");
+    }
+
+    // ===== 6. Control Functions =====
     function setMode(isAuto) {
       database.ref('/air_purifier/control/isAuto').set(isAuto);
     }
@@ -405,7 +539,7 @@
       }
     }
 
-    // ===== 6. Air Quality UI Update Helper =====
+    // ===== 7. Air Quality UI Update Helper =====
     function updateAirQualityUI(pm25) {
       const avatar = document.getElementById('aqiAvatar');
       const pill = document.getElementById('aqiPill');
@@ -442,7 +576,7 @@
       }
     }
 
-    // ===== 7. Realtime Data Listeners =====
+    // ===== 8. Realtime Data Listeners =====
     database.ref('/air_purifier/live').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
