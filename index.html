@@ -1,306 +1,472 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SMART AIR PURIFIER (CLOUD)</title>
+#include <Adafruit_GFX.h>    
+#include <Adafruit_ST7735.h> 
+#include <SPI.h>
+#include <DHT.h> 
+#include <WiFi.h>          
+#include <WiFiManager.h>   
+#include <FirebaseESP32.h>  
+#include <ArduinoJson.h>   
+#include <time.h> // เพิ่มสำหรับจัดการเวลา NTP
+
+// ===== ตั้งค่า Firebase =====
+#define FIREBASE_HOST "diy-air-purifier-default-rtdb.asia-southeast1.firebasedatabase.app" 
+#define FIREBASE_AUTH "Ft90C5dS4uXICVfFa0sK45NxBmsXNcgCE0Kw1sNu"                            
+
+// ===== ตั้งค่า NTP TIME (เวลาประเทศไทย UTC+7) =====
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 25200;      // UTC+7 (7 ชั่วโมง * 3600 วินาที)
+const int   daylightOffset_sec = 0;
+
+#define TFT_CS     5   
+#define TFT_RST    4   
+#define TFT_DC     2   
+#define TFT_MOSI   23  
+#define TFT_SCLK   18  
+#define ST7735_GRAY  0x8410
+
+#define DHTPIN     15     
+#define DHTTYPE    DHT22  
+
+// กำหนดขาปุ่มกด
+#define BTN_MODE_PIN   32  
+#define BTN_UP_PIN     33  
+#define BTN_DOWN_PIN   26  
+
+DHT dht(DHTPIN, DHTTYPE); 
+HardwareSerial pmsSerial(2); 
+
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
+
+// ตัวแปร Firebase
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+
+uint8_t buffer[32];   
+int pm1_0 = 0, pm2_5 = 0, pm10_0 = 0;
+float temperature = 0.0, humidity = 0.0;
+
+unsigned long lastUpdateTime = 0;
+const unsigned long updateInterval = 2000; 
+
+// ตัวแปรสำหรับ Data Logging (ทุกๆ 10 นาที)
+unsigned long lastLogTime = 0;
+const unsigned long logInterval = 600000; 
+
+// CONFIG BTS7960 PWM
+#define FAN_PWM_PIN 25        
+#define RESET_WIFI_PIN  12 
+const int pwmFreq = 5000;     
+const int pwmResolution = 8;  
+
+int fanSpeedPercent = 0;      
+bool isAutoMode = false;       
+bool isPowerOn = true;        
+bool isOfflineMode = false;   
+
+// ตัวแปรสำหรับคุมจังหวะกดปุ่ม (Debounce)
+unsigned long lastBtnTime = 0;
+const unsigned long debounceDelay = 400; 
+unsigned long btnPressedTime = 0; 
+bool isBtnPressed = false;      
+bool modeSwitched = false;      
+
+// ตัวแปรสำหรับจับการกด Double Click ในช่วง Booting/Connecting WiFi
+int modeClickCount = 0;
+unsigned long lastModeClickTime = 0;
+WiFiManager wm;
+
+// ===== ฟังก์ชันดึงเวลาปัจจุบันในรูปแบบ "HH:MM" =====
+String getFormattedTime() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    return "";
+  }
+  char timeBuff[20];
+  strftime(timeBuff, sizeof(timeBuff), "%H:%M", &timeinfo);
+  return String(timeBuff);
+}
+
+void updateFanHardware() {
+  if (!isPowerOn) {
+    ledcWrite(FAN_PWM_PIN, 0); 
+    Serial.println("System Power OFF: Fan Stopped.");
+    return;
+  }
   
-  <!-- Bootstrap 5 CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  int dutyCycle = map(fanSpeedPercent, 0, 100, 0, 255);
+  ledcWrite(FAN_PWM_PIN, dutyCycle);
+  Serial.print("Update Fan Speed: "); Serial.print(fanSpeedPercent); Serial.println("%");
+}
 
-  <!-- Firebase SDK v8 -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+void syncControlToFirebase() {
+  if (!isOfflineMode && Firebase.ready()) {
+    Firebase.setBool(fbdo, "/air_purifier/control/isPowerOn", isPowerOn);
+    Firebase.setBool(fbdo, "/air_purifier/control/isAuto", isAutoMode);
+    Firebase.setInt(fbdo, "/air_purifier/control/fanSpeed", fanSpeedPercent);
+  }
+}
 
-  <style>
-    body {
-      background-color: #f4f6f9;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+void checkPhysicalButtons() {
+  int btnState = digitalRead(BTN_MODE_PIN);
+
+  if (btnState == LOW) { 
+    if (!isBtnPressed) {
+      isBtnPressed = true;
+      btnPressedTime = millis(); 
+      modeSwitched = false;      
     }
-    .card {
-      border: none;
-      border-radius: 12px;
-    }
-    .card-val {
-      font-size: 3rem;
-      font-weight: bold;
-    }
-    .unit-text {
-      color: #6c757d;
-      font-size: 0.85rem;
-    }
-    .sub-pm-text {
-      font-size: 1.1rem;
-      font-weight: 600;
-    }
-    .temp-val {
-      font-size: 1.8rem;
-      font-weight: bold;
-      color: #dc3545;
-    }
-    .humid-val {
-      font-size: 1.8rem;
-      font-weight: bold;
-      color: #0dcaf0;
-    }
-    .btn-mode-container {
-      display: flex;
-      border: 1px solid #ced4da;
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .btn-mode {
-      flex: 1;
-      border: none;
-      background: #ffffff;
-      color: #0d6efd;
-      padding: 8px 0;
-      font-weight: 500;
-      transition: all 0.2s;
-    }
-    .btn-mode.active {
-      background-color: #0d6efd;
-      color: #ffffff;
-    }
-    .btn-mode:first-child {
-      border-right: 1px solid #ced4da;
-    }
-  </style>
-</head>
-<body>
-
-  <div class="container py-4" style="max-width: 1000px;">
-    <!-- Title Header -->
-    <h3 class="text-center fw-bold mb-4" style="letter-spacing: 1px;">SMART AIR PURIFIER (CLOUD)</h3>
-
-    <!-- Top Cards Layout -->
-    <div class="row g-3 mb-4">
-      
-      <!-- 1. PM Dust Card (PM 2.5 หลัก + PM 1.0 และ PM 10) -->
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
-          <div class="text-dark fw-semibold">ระดับค่าฝุ่น</div>
-          
-          <!-- PM 2.5 หลัก -->
-          <div class="my-1">
-            <div id="pm25Val" class="card-val text-success">0</div>
-            <div class="unit-text">PM 2.5 (ug/m³)</div>
-          </div>
-
-          <!-- PM 1.0 & PM 10 ย่อย -->
-          <div class="row pt-2 border-top">
-            <div class="col-6 border-end">
-              <span class="unit-text d-block">PM 1.0</span>
-              <span id="pm10Val" class="sub-pm-text text-primary">0</span> <small class="unit-text">ug/m³</small>
-            </div>
-            <div class="col-6">
-              <span class="unit-text d-block">PM 10</span>
-              <span id="pm100Val" class="sub-pm-text text-warning">0</span> <small class="unit-text">ug/m³</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. Temp / Humid Card -->
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
-          <div class="text-dark fw-semibold">อุณหภูมิ / ความชื้น</div>
-          <div class="my-auto">
-            <div id="tempVal" class="temp-val mb-1">0.0 °C</div>
-            <div id="humidVal" class="humid-val">0.0 %</div>
-          </div>
-          <div></div>
-        </div>
-      </div>
-
-      <!-- 3. Control Card -->
-      <div class="col-md-4">
-        <div class="card p-3 text-center shadow-sm h-100">
-          <div class="text-dark fw-semibold mb-3">ควบคุมการทำงาน</div>
-          
-          <div class="btn-mode-container mb-3">
-            <button id="btnAuto" class="btn-mode active" onclick="setMode(true)">AUTO</button>
-            <button id="btnManual" class="btn-mode" onclick="setMode(false)">MANUAL</button>
-          </div>
-
-          <div class="mt-2">
-            <input type="range" class="form-range" id="fanSlider" min="0" max="100" value="0" oninput="updateSpeedLabel(this.value)" onchange="setFanSpeed(this.value)">
-            <div class="text-center mt-2">
-              <small class="text-dark">ความเร็วพัดลม: <span id="speedLabel">0</span>%</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Data Logging Chart Card -->
-    <div class="card p-4 shadow-sm">
-      <h6 class="fw-bold text-dark mb-3">ประวัติค่าฝุ่นย้อนหลัง (Data Logging)</h6>
-      <div style="position: relative; height:280px;">
-        <canvas id="logChart"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // ===== 1. Firebase Configuration =====
-    const firebaseConfig = {
-      databaseURL: "https://diy-air-purifier-default-rtdb.asia-southeast1.firebasedatabase.app"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
-
-    // ===== 2. Chart.js Initialization (รองรับทั้ง PM1.0, PM2.5, PM10) =====
-    const ctx = document.getElementById('logChart').getContext('2d');
-    const logChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: 'PM 2.5',
-            data: [],
-            borderColor: '#28a745',
-            backgroundColor: 'rgba(40, 167, 69, 0.05)',
-            borderWidth: 2,
-            pointRadius: 2,
-            fill: true,
-            tension: 0.2
-          },
-          {
-            label: 'PM 1.0',
-            data: [],
-            borderColor: '#0d6efd',
-            borderWidth: 1.5,
-            pointRadius: 0,
-            fill: false,
-            tension: 0.2
-          },
-          {
-            label: 'PM 10',
-            data: [],
-            borderColor: '#ffc107',
-            borderWidth: 1.5,
-            pointRadius: 0,
-            fill: false,
-            tension: 0.2
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: true,
-            grid: { color: '#e9ecef' }
-          },
-          x: {
-            grid: { display: false }
-          }
-        },
-        plugins: {
-          legend: {
-            display: true,
-            position: 'top'
-          }
-        }
-      }
-    });
-
-    // ===== 3. Control Functions =====
-    function setMode(isAuto) {
-      database.ref('/air_purifier/control/isAuto').set(isAuto);
-    }
-
-    function setFanSpeed(val) {
-      database.ref('/air_purifier/control/fanSpeed').set(parseInt(val));
-    }
-
-    function updateSpeedLabel(val) {
-      document.getElementById('speedLabel').innerText = val;
-    }
-
-    function updateUIState(isAuto) {
-      const btnAuto = document.getElementById('btnAuto');
-      const btnManual = document.getElementById('btnManual');
-      const slider = document.getElementById('fanSlider');
-
-      if (isAuto) {
-        btnAuto.classList.add('active');
-        btnManual.classList.remove('active');
-        slider.disabled = true;
-      } else {
-        btnManual.classList.add('active');
-        btnAuto.classList.remove('active');
-        slider.disabled = false;
-      }
-    }
-
-    // ===== 4. Realtime Data Listeners =====
     
-    // ฟังค่า Live Data (PM1.0, PM2.5, PM10)
-    database.ref('/air_purifier/live').on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        // อัปเดตค่า PM2.5
-        const pm25 = data.pm25 !== undefined ? data.pm25 : 0;
-        const pmElem = document.getElementById('pm25Val');
-        pmElem.innerText = pm25;
-
-        if (pm25 <= 15) pmElem.className = "card-val text-success";
-        else if (pm25 <= 37) pmElem.className = "card-val text-warning";
-        else pmElem.className = "card-val text-danger";
-
-        // อัปเดตค่า PM1.0 และ PM10
-        document.getElementById('pm10Val').innerText = data.pm10 !== undefined ? data.pm10 : 0;
-        document.getElementById('pm100Val').innerText = data.pm100 !== undefined ? data.pm100 : 0;
-
-        // อัปเดต Temp & Humid
-        document.getElementById('tempVal').innerText = (data.temp ? data.temp.toFixed(1) : "0.0") + " °C";
-        document.getElementById('humidVal').innerText = (data.humid ? data.humid.toFixed(1) : "0.0") + " %";
+    if ((millis() - btnPressedTime >= 3000) && isBtnPressed && !modeSwitched) {
+      isPowerOn = !isPowerOn; 
+      modeSwitched = true;    
+      
+      updateFanHardware();    
+      syncControlToFirebase();
+      
+      tft.fillScreen(ST7735_BLACK);
+      
+      if (!isPowerOn) {
+        tft.setTextSize(2); 
+        tft.setTextColor(0xF800, ST7735_BLACK); 
+        tft.setCursor(26, 56);    
+        tft.print("POWER OFF");
       }
-    });
+    }
+  } 
+  else { 
+    if (isBtnPressed) {
+      if ((millis() - btnPressedTime < 3000) && !modeSwitched && isPowerOn) {
+        isAutoMode = !isAutoMode; 
+        Serial.print("Button Clicked: Switch Mode to -> ");
+        Serial.println(isAutoMode ? "AUTO" : "MANUAL");
+        if (!isAutoMode) { updateFanHardware(); }
+        syncControlToFirebase();
+      }
+      isBtnPressed = false; 
+    }
+  }
 
-    // ฟังค่า Control
-    database.ref('/air_purifier/control').on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        if (data.isAuto !== undefined) updateUIState(data.isAuto);
-        if (data.fanSpeed !== undefined) {
-          document.getElementById('fanSlider').value = data.fanSpeed;
-          document.getElementById('speedLabel').innerText = data.fanSpeed;
+  if (isPowerOn && !isAutoMode && (millis() - lastBtnTime > debounceDelay)) {
+    if (digitalRead(BTN_UP_PIN) == LOW) {
+      fanSpeedPercent += 10;
+      if (fanSpeedPercent > 100) fanSpeedPercent = 100;
+      lastBtnTime = millis();
+      updateFanHardware();
+      syncControlToFirebase();
+    }
+    
+    if (digitalRead(BTN_DOWN_PIN) == LOW) {
+      fanSpeedPercent -= 10;
+      if (fanSpeedPercent < 0) fanSpeedPercent = 0;
+      lastBtnTime = millis();
+      updateFanHardware();
+      syncControlToFirebase();
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pmsSerial.begin(9600, SERIAL_8N1, 16, 17); 
+  dht.begin(); 
+
+  pinMode(BTN_MODE_PIN, INPUT_PULLUP);
+  pinMode(BTN_UP_PIN, INPUT_PULLUP);
+  pinMode(BTN_DOWN_PIN, INPUT_PULLUP);
+  pinMode(RESET_WIFI_PIN, INPUT_PULLUP);
+
+  ledcAttach(FAN_PWM_PIN, pwmFreq, pwmResolution);
+  ledcWrite(FAN_PWM_PIN, 0); 
+
+  tft.initR(INITR_BLACKTAB); 
+  tft.setRotation(1);           
+  tft.fillScreen(ST7735_BLACK); 
+
+  // ===== ตรวจสอบการกดปุ่ม Reset WiFi =====
+  if (digitalRead(RESET_WIFI_PIN) == LOW) { 
+    tft.setTextSize(2);
+    tft.setTextColor(ST7735_RED, ST7735_BLACK);
+    tft.setCursor(15, 40);
+    tft.print("RESET WIFI");
+    
+    tft.setTextSize(1);
+    tft.setTextColor(ST7735_WHITE, ST7735_BLACK);
+    tft.setCursor(20, 75);
+    tft.print("Clearing saved Wi-Fi");
+
+    wm.resetSettings(); 
+    Serial.println("Wi-Fi settings reset!");
+    delay(3000);
+    tft.fillScreen(ST7735_BLACK);
+  }
+
+  tft.setTextSize(1); 
+  tft.setTextColor(ST7735_WHITE, ST7735_BLACK); 
+  tft.setCursor(15, 50); 
+  tft.print("Connecting WiFi...");
+  tft.setCursor(10, 70);
+  tft.setTextColor(ST7735_YELLOW, ST7735_BLACK);
+  tft.print("Press Mode x2: Skip");
+
+  wm.setConfigPortalTimeout(120); 
+
+  wm.setConfigPortalBlocking(false);
+  wm.autoConnect("DIY_Purifier_AP");
+
+  bool btnLastState = HIGH;
+  unsigned long startWait = millis();
+
+  while (WiFi.status() != WL_CONNECTED && (millis() - startWait < 120000)) {
+    wm.process();
+
+    bool btnState = digitalRead(BTN_MODE_PIN);
+    if (btnState == LOW && btnLastState == HIGH) {
+      unsigned long now = millis();
+      if (now - lastModeClickTime < 600) {
+        modeClickCount++;
+      } else {
+        modeClickCount = 1;
+      }
+      lastModeClickTime = now;
+      delay(50);
+    }
+    btnLastState = btnState;
+
+    if (modeClickCount >= 2) {
+      isOfflineMode = true;
+      Serial.println("\n[SKIP] Double click detected! Entering OFFLINE MODE.");
+      
+      tft.fillScreen(ST7735_BLACK);
+      tft.setTextSize(2);
+      tft.setTextColor(ST7735_ORANGE, ST7735_BLACK);
+      tft.setCursor(10, 56);
+      tft.print("OFFLINE MODE");
+      delay(1500);
+      break;
+    }
+    delay(10);
+  }
+
+  tft.fillScreen(ST7735_BLACK);
+
+  if (WiFi.status() == WL_CONNECTED && !isOfflineMode) {
+    Serial.println("\nWiFi Connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+
+    // ซิงค์เวลาจาก NTP Server
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    Serial.println("Syncing Time via NTP...");
+
+    config.host = FIREBASE_HOST;
+    config.signer.tokens.legacy_token = FIREBASE_AUTH;
+
+    Firebase.begin(&config, &auth);
+    Firebase.reconnectWiFi(true);
+
+    if (Firebase.beginStream(fbdo, "/air_purifier/control")) {
+      Serial.println("✅ Firebase Stream Started Successfully!");
+    }
+
+    if (Firebase.ready()) {
+      Serial.println("✅ Firebase Connected Successfully!");
+    }
+  } else {
+    isOfflineMode = true;
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    Serial.println("Running in Offline Mode.");
+  }
+}
+
+void loop() {
+  checkPhysicalButtons(); 
+
+  // 1. รับคำสั่ง Realtime จาก Firebase Stream
+  if (!isOfflineMode && Firebase.ready()) {
+    if (Firebase.readStream(fbdo)) {
+      if (fbdo.streamAvailable()) {
+        String path = fbdo.dataPath();
+
+        if (path.endsWith("/isPowerOn") || path == "/isPowerOn") {
+          isPowerOn = fbdo.boolData();
+          updateFanHardware();
+          tft.fillScreen(ST7735_BLACK);
+          if (!isPowerOn) {
+            tft.setTextSize(2); 
+            tft.setTextColor(0xF800, ST7735_BLACK); 
+            tft.setCursor(26, 56);    
+            tft.print("POWER OFF");
+          }
+        } 
+        else if (path.endsWith("/isAuto") || path == "/isAuto") {
+          isAutoMode = fbdo.boolData();
+          if (!isAutoMode) { updateFanHardware(); }
+        } 
+        else if (path.endsWith("/fanSpeed") || path == "/fanSpeed") {
+          fanSpeedPercent = fbdo.intData();
+          if (!isAutoMode && isPowerOn) { updateFanHardware(); }
+        }
+        else if (path == "/" && fbdo.dataType() == "json") {
+          FirebaseJson &json = fbdo.jsonObject();
+          FirebaseJsonData result;
+          
+          if (json.get(result, "isPowerOn")) isPowerOn = result.to<bool>();
+          if (json.get(result, "isAuto")) isAutoMode = result.to<bool>();
+          if (json.get(result, "fanSpeed")) fanSpeedPercent = result.to<int>();
+          
+          updateFanHardware();
         }
       }
-    });
+    }
+  }
 
-    // ฟังค่า Data Logging
-    database.ref('/air_purifier/logs').limitToLast(20).on('value', (snapshot) => {
-      const logs = snapshot.val();
-      if (logs) {
-        const labels = [];
-        const pm25Data = [];
-        const pm10Data = [];
-        const pm100Data = [];
+  // 2. อ่านค่าจากเซ็นเซอร์ฝุ่น PMS5003
+  if (pmsSerial.available() >= 32) {
+    if (pmsSerial.read() == 0x42 && pmsSerial.read() == 0x4D) {
+      buffer[0] = 0x42; buffer[1] = 0x4D;
+      for (int i = 2; i < 32; i++) { buffer[i] = pmsSerial.read(); }
+      pm1_0 = (buffer[10] << 8) | buffer[11];  
+      pm2_5 = (buffer[12] << 8) | buffer[13];  
+      pm10_0 = (buffer[14] << 8) | buffer[15];  
+    }
+  }
+
+  // 3. อัปเดตจอ TFT และส่งข้อมูลขึ้น Firebase Live Data (ทุกๆ 2 วินาที)
+  if (millis() - lastUpdateTime >= updateInterval) {
+    lastUpdateTime = millis();
+
+    humidity = dht.readHumidity();
+    temperature = dht.readTemperature();
+
+    if (isPowerOn) {
+      if (isAutoMode) {
+        int lastAutoSpeed = fanSpeedPercent; 
         
-        Object.keys(logs).forEach((key) => {
-          labels.push("");
-          pm25Data.push(logs[key].pm25 || 0);
-          pm10Data.push(logs[key].pm10 || 0);
-          pm100Data.push(logs[key].pm100 || 0);
-        });
+        if (pm2_5 <= 15)       { fanSpeedPercent = 20; }       
+        else if (pm2_5 <= 37) { fanSpeedPercent = 50; }  
+        else if (pm2_5 <= 75) { fanSpeedPercent = 80; }  
+        else                  { fanSpeedPercent = 100; }                  
 
-        logChart.data.labels = labels;
-        logChart.data.datasets[0].data = pm25Data;
-        logChart.data.datasets[1].data = pm10Data;
-        logChart.data.datasets[2].data = pm100Data;
-        logChart.update();
+        int dutyCycle = map(fanSpeedPercent, 0, 100, 0, 255);
+        ledcWrite(FAN_PWM_PIN, dutyCycle); 
+
+        if (!isOfflineMode && fanSpeedPercent != lastAutoSpeed && Firebase.ready()) {
+          Firebase.setInt(fbdo, "/air_purifier/control/fanSpeed", fanSpeedPercent);
+        }
       }
-    });
-  </script>
-</body>
-</html>
+
+      if (!isOfflineMode && Firebase.ready()) {
+        FirebaseJson json;
+        json.set("pm25", pm2_5);
+        json.set("pm10", pm1_0);
+        json.set("pm100", pm10_0);
+        json.set("temp", isnan(temperature) ? 0 : temperature);
+        json.set("humid", isnan(humidity) ? 0 : humidity);
+        json.set("fanSpeed", fanSpeedPercent);
+        json.set("isAuto", isAutoMode);
+        json.set("isPowerOn", isPowerOn);
+
+        Firebase.setJSON(fbdo, "/air_purifier/live", json);
+      }
+
+      // --- แสดงผลบนหน้าจอ TFT (แก้ปัญหากระพริบ) ---
+      uint16_t statusColor; 
+      if (pm2_5 <= 15)       { statusColor = 0x07E0; }   
+      else if (pm2_5 <= 37) { statusColor = 0xFFE0; }   
+      else if (pm2_5 <= 75) { statusColor = 0xFD20; }   
+      else                  { statusColor = 0xF800; }   
+      
+      static int lastPmDigitCount = 0;
+      int currentPmDigitCount = (pm2_5 < 10) ? 1 : ((pm2_5 < 100) ? 2 : 3);
+
+      if (currentPmDigitCount != lastPmDigitCount) {
+        tft.fillRect(0, 6, 160, 60, ST7735_BLACK); 
+        lastPmDigitCount = currentPmDigitCount;
+      }
+
+      tft.setTextSize(8); 
+      tft.setTextColor(statusColor, ST7735_BLACK); 
+      
+      if (pm2_5 < 10) {
+        tft.setCursor(56, 6);       
+      } else if (pm2_5 < 100) {
+        tft.setCursor(32, 6);       
+      } else {
+        tft.setCursor(8, 6);        
+      }
+      tft.print(pm2_5);
+
+      tft.setTextSize(1); 
+      tft.setCursor(48, 68); 
+      tft.setTextColor(ST7735_WHITE, ST7735_BLACK); 
+      tft.print("PM2.5 ug/m3");
+
+      tft.setTextSize(1);
+      
+      tft.setCursor(4, 96); 
+      tft.setTextColor(ST7735_WHITE, ST7735_BLACK); 
+      tft.print("MODE: "); 
+      if (isAutoMode) {
+        tft.setTextColor(0x07FF, ST7735_BLACK); 
+        tft.print("AUTO   ");
+      } else {
+        tft.setTextColor(0xFD20, ST7735_BLACK); 
+        tft.print("MANUAL ");
+      }
+
+      tft.setCursor(86, 96); 
+      tft.setTextColor(ST7735_WHITE, ST7735_BLACK); 
+      tft.print("PM1 : "); 
+      tft.setTextColor(ST7735_CYAN, ST7735_BLACK); 
+      if (pm1_0 < 10) tft.print(" ");
+      tft.print(pm1_0); 
+      tft.print("  ug ");
+
+      tft.setCursor(4, 114); 
+      tft.setTextColor(ST7735_WHITE, ST7735_BLACK); 
+      tft.print("SPD : "); 
+      tft.setTextColor(ST7735_YELLOW, ST7735_BLACK); 
+      if (fanSpeedPercent < 100) tft.print(" ");
+      if (fanSpeedPercent < 10)  tft.print(" ");
+      tft.print(fanSpeedPercent); 
+      tft.print("%");
+
+      tft.setCursor(86, 114); 
+      tft.setTextColor(ST7735_WHITE, ST7735_BLACK); 
+      tft.print("TMP : "); 
+      tft.setTextColor(0xF81F, ST7735_BLACK); 
+      tft.print(temperature, 1); 
+      tft.print(" C ");
+    }
+  }
+
+  // 4. บันทึก Data Logging ลง Firebase (ทุกๆ 10 นาที) พร้อม Timestamp เวลาไทย
+  if (!isOfflineMode && (millis() - lastLogTime >= logInterval)) {
+    lastLogTime = millis();
+    if (Firebase.ready() && isPowerOn) {
+      String currentTime = getFormattedTime();
+
+      FirebaseJson logJson;
+      logJson.set("pm25", pm2_5);
+      logJson.set("pm10", pm1_0);   // PM1.0
+      logJson.set("pm100", pm10_0); // PM10
+      logJson.set("temp", isnan(temperature) ? 0 : temperature);
+      logJson.set("humid", isnan(humidity) ? 0 : humidity);
+      
+      if (currentTime != "") {
+        logJson.set("timestamp", currentTime); // เช่น "17:10"
+      } else {
+        logJson.set("timestamp", ".sv");       // หาก NTP ไม่พร้อมใช้ Server Timestamp
+      }
+
+      if (Firebase.pushJSON(fbdo, "/air_purifier/logs", logJson)) {
+        Serial.println("✅ Data logged to /air_purifier/logs successfully!");
+      } else {
+        Serial.print("❌ Data logging failed: ");
+        Serial.println(fbdo.errorReason());
+      }
+    }
+  }
+}
