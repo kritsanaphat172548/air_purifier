@@ -76,6 +76,29 @@
       padding: 6px 12px;
       border-radius: 20px;
     }
+
+    /* ===== สไตล์ส่วนแสดงสถานะคุณภาพอากาศที่เพิ่มเข้ามา ===== */
+    .aqi-avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background-color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.8rem;
+      margin: 0 auto 10px auto;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
+    .aqi-pill {
+      display: inline-block;
+      padding: 6px 20px;
+      border-radius: 25px;
+      font-weight: bold;
+      font-size: 1rem;
+      color: #ffffff;
+      transition: all 0.3s ease;
+    }
   </style>
 </head>
 <body>
@@ -90,10 +113,16 @@
     <!-- Top Cards Layout -->
     <div class="row g-3 mb-4">
       
-      <!-- 1. PM Dust Card (PM 2.5 หลัก + PM 1.0 และ PM 10) -->
+      <!-- 1. PM Dust Card + Air Quality Status -->
       <div class="col-md-4">
         <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
           <div class="text-dark fw-semibold">ระดับค่าฝุ่นปัจจุบัน</div>
+
+          <!-- ส่วนแสดงรูปสถานะคุณภาพอากาศ (เพิ่มเข้ามา) -->
+          <div class="my-2">
+            <div id="aqiAvatar" class="aqi-avatar">😊</div>
+            <div id="aqiPill" class="aqi-pill bg-success">คุณภาพอากาศดีมาก</div>
+          </div>
           
           <!-- PM 2.5 หลัก -->
           <div class="my-1">
@@ -193,7 +222,7 @@
 
     // ===== 2. ESP32 Connection Monitor (Heartbeat) =====
     let lastSeenTime = 0;
-    const offlineTimeoutMs = 10000; // เกิน 10 วินาที ไม่มีข้อมูลส่งมา ถือว่า ESP32 หลุด/ออฟไลน์
+    const offlineTimeoutMs = 10000;
 
     setInterval(() => {
       const statusElem = document.getElementById('connectionStatus');
@@ -295,27 +324,66 @@
       }
     }
 
-    // ===== 5. Realtime Data Listeners =====
+    // ===== 5. Air Quality UI Update Helper (ปรับระดับคุณภาพอากาศ) =====
+    function updateAirQualityUI(pm25) {
+      const avatar = document.getElementById('aqiAvatar');
+      const pill = document.getElementById('aqiPill');
+      const pmElem = document.getElementById('pm25Val');
+
+      if (pm25 <= 15) {
+        // คุณภาพอากาศดีมาก (0 - 15.0)
+        avatar.innerText = "😊";
+        pill.innerText = "คุณภาพอากาศดีมาก";
+        pill.style.backgroundColor = "#28a745"; // สีเขียว
+        pmElem.className = "card-val text-success";
+      } else if (pm25 <= 37.5) {
+        // คุณภาพอากาศดี (15.1 - 37.5)
+        avatar.innerText = "🙂";
+        pill.innerText = "คุณภาพอากาศดี";
+        pill.style.backgroundColor = "#9ec55d"; // สีเขียวอ่อนตามรูปภาพตัวอย่าง
+        pmElem.className = "card-val text-success";
+      } else if (pm25 <= 75) {
+        // ปานกลาง (37.6 - 75.0)
+        avatar.innerText = "😐";
+        pill.innerText = "ปานกลาง";
+        pill.style.backgroundColor = "#ffc107"; // สีเหลือง
+        pill.style.color = "#000000";
+        pmElem.className = "card-val text-warning";
+      } else if (pm25 <= 150) {
+        // เริ่มมีผลกระทบต่อสุขภาพ (75.1 - 150.0)
+        avatar.innerText = "😷";
+        pill.innerText = "เริ่มมีผลกระทบต่อสุขภาพ";
+        pill.style.backgroundColor = "#fd7e14"; // สีส้ม
+        pill.style.color = "#ffffff";
+        pmElem.className = "card-val text-danger";
+      } else {
+        // มีผลกระทบต่อสุขภาพ (> 150.0)
+        avatar.innerText = "😱";
+        pill.innerText = "มีผลกระทบต่อสุขภาพ";
+        pill.style.backgroundColor = "#dc3545"; // สีแดง
+        pill.style.color = "#ffffff";
+        pmElem.className = "card-val text-danger";
+      }
+    }
+
+    // ===== 6. Realtime Data Listeners =====
     
     // ฟังค่า Live Data จาก ESP32
     database.ref('/air_purifier/live').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        // เมื่อได้รับแพ็กเก็ตใหม่จาก ESP32 ให้ประทับเวลาปัจจุบันทันที
         lastSeenTime = Date.now();
 
         const statusElem = document.getElementById('connectionStatus');
         statusElem.className = "badge bg-success status-badge";
         statusElem.innerText = "🟢 ESP32 ออนไลน์";
 
-        // อัปเดตค่า PM2.5
+        // อัปเดตค่า PM2.5 และเปลี่ยนสถานะคุณภาพอากาศ
         const pm25 = data.pm25 !== undefined ? data.pm25 : 0;
-        const pmElem = document.getElementById('pm25Val');
-        pmElem.innerText = pm25;
-
-        if (pm25 <= 15) pmElem.className = "card-val text-success";
-        else if (pm25 <= 37) pmElem.className = "card-val text-warning";
-        else pmElem.className = "card-val text-danger";
+        document.getElementById('pm25Val').innerText = pm25;
+        
+        // เรียกฟังก์ชันอัปเดตไอคอนและป้ายสถานะคุณภาพอากาศ
+        updateAirQualityUI(pm25);
 
         // อัปเดตค่า PM1.0 และ PM10
         document.getElementById('pm10Val').innerText = data.pm10 !== undefined ? data.pm10 : 0;
