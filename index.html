@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SMART AIR PURIFIER & FORECAST</title>
+  <title>SMART AIR PURIFIER & HEALTH ADVISORY</title>
   
   <!-- Bootstrap 5 CSS & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -79,7 +79,7 @@
       border-radius: 20px;
     }
 
-    /* สถานะคุณภาพอากาศ Avatar & Pill */
+    /* Avatar สถานะคุณภาพอากาศ */
     .aqi-avatar {
       width: 80px;
       height: 80px;
@@ -102,14 +102,10 @@
       transition: all 0.3s ease;
     }
 
-    /* การ์ดพยากรณ์อากาศ */
-    .forecast-card {
-      background: #ffffff;
+    /* Risk Level Box */
+    .risk-card {
       border-radius: 12px;
-      transition: transform 0.2s;
-    }
-    .forecast-card:hover {
-      transform: translateY(-3px);
+      transition: all 0.3s;
     }
   </style>
 </head>
@@ -132,8 +128,8 @@
             </button>
           </li>
           <li class="nav-item">
-            <button class="nav-link px-3" id="tabForecast" onclick="switchTab('forecast')">
-              <i class="bi bi-cloud-sun me-1"></i> พยากรณ์ฝุ่น & อากาศล่วงหน้า
+            <button class="nav-link px-3" id="tabHealth" onclick="switchTab('health')">
+              <i class="bi bi-heart-pulse-fill me-1"></i> ประเมินความเสี่ยงสุขภาพ
             </button>
           </li>
         </ul>
@@ -145,7 +141,6 @@
 
     <!-- ================= 1. หน้าแดชบอร์ดอุปกรณ์ (DEVICE SECTION) ================= -->
     <div id="deviceSection">
-      <!-- Title Header + Status Badge -->
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h4 class="fw-bold m-0 text-dark">ระบบควบคุมเครื่องฟอกอากาศ</h4>
         <span id="connectionStatus" class="badge bg-secondary status-badge">⚪ ตรวจสอบสถานะ ESP32...</span>
@@ -154,24 +149,21 @@
       <!-- Top Cards Layout -->
       <div class="row g-3 mb-4">
         
-        <!-- 1. PM Dust Card + Air Quality Status -->
+        <!-- 1. PM Dust Card -->
         <div class="col-md-4">
           <div class="card p-3 text-center shadow-sm h-100 d-flex flex-column justify-content-between">
             <div class="text-dark fw-semibold">ระดับค่าฝุ่นปัจจุบัน</div>
 
-            <!-- ส่วนแสดงรูปสถานะคุณภาพอากาศ -->
             <div class="my-2">
               <div id="aqiAvatar" class="aqi-avatar">😊</div>
               <div id="aqiPill" class="aqi-pill bg-success">คุณภาพอากาศดีมาก</div>
             </div>
             
-            <!-- PM 2.5 หลัก -->
             <div class="my-1">
               <div id="pm25Val" class="card-val text-success">0</div>
               <div class="unit-text">PM 2.5 (ug/m³)</div>
             </div>
 
-            <!-- PM 1.0 & PM 10 ย่อย -->
             <div class="row pt-2 border-top">
               <div class="col-6 border-end">
                 <span class="unit-text d-block">PM 1.0</span>
@@ -218,7 +210,7 @@
 
       </div>
 
-      <!-- Dust Statistics Cards Section -->
+      <!-- Statistics Section -->
       <div class="row g-3 mb-4">
         <div class="col-md-4">
           <div class="card p-3 text-center shadow-sm bg-white">
@@ -243,7 +235,7 @@
         </div>
       </div>
 
-      <!-- Data Logging Chart Card -->
+      <!-- Data Logging Chart -->
       <div class="card p-4 shadow-sm">
         <h6 class="fw-bold text-dark mb-3">ประวัติค่าฝุ่นย้อนหลัง (Data Logging)</h6>
         <div style="position: relative; height:280px;">
@@ -252,123 +244,98 @@
       </div>
     </div>
 
-    <!-- ================= 2. หน้าพยากรณ์ฝุ่น & อากาศล่วงหน้า (FORECAST SECTION) ================= -->
-    <div id="forecastSection" style="display: none;">
+    <!-- ================= 2. หน้าประเมินความเสี่ยงสุขภาพ (HEALTH SECTION) ================= -->
+    <div id="healthSection" style="display: none;">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-          <h4 class="fw-bold m-0 text-dark">พยากรณ์คุณภาพอากาศและแนวโน้มฝุ่นล่วงหน้า</h4>
-          <small class="text-muted">ประเมินแนวโน้ม PM2.5 สภาพอากาศ และคำแนะนำในการปฏิบัติตน</small>
+          <h4 class="fw-bold m-0 text-dark">ระบบประเมินความเสี่ยงสุขภาพ & คำแนะนำรายบุคคล</h4>
+          <small class="text-muted">ประเมินผลกระทบจากสภาพอากาศและฝุ่น PM2.5 ตามข้อมูลสุขภาพของคุณ</small>
         </div>
-        <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="refreshForecast()">
-          <i class="bi bi-arrow-clockwise me-1"></i> อัปเดตข้อมูล
-        </button>
       </div>
 
-      <!-- 1. Banner สรุปพยากรณ์ภาพรวมวันนี้ -->
-      <div class="card p-4 shadow-sm mb-4 bg-primary text-white">
-        <div class="row align-items-center">
-          <div class="col-md-8">
-            <h5 class="fw-bold mb-2"><i class="bi bi-shield-check me-2"></i>แนวโน้มคุณภาพอากาศวันนี้</h5>
-            <p class="m-0 fs-6 opacity-90" id="forecastSummaryText">
-              คาดการณ์ว่าสภาพอากาศเปิด มีลมระบายฝุ่นได้ดี ค่าฝุ่น PM2.5 อยู่ในเกณฑ์มาตรฐาน เหมาะสำหรับการทำกิจกรรมกลางแจ้ง
+      <div class="row g-4">
+        <!-- ฝั่งซ้าย: ฟอร์มเลือกกลุ่มผู้ใช้งาน / ประวัติสุขภาพ -->
+        <div class="col-md-5">
+          <div class="card p-4 shadow-sm h-100">
+            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-person-lines-fill text-primary me-2"></i>ข้อมูลโปรไฟล์ผู้ใช้งาน</h6>
+            
+            <div class="mb-3">
+              <label class="form-label small fw-bold">กลุ่มผู้ใช้งาน</label>
+              <select id="userGroup" class="form-select" onchange="calculateHealthRisk()">
+                <option value="general">บุคคลทั่วไป (สุขภาพแข็งแรง)</option>
+                <option value="child">เด็ก / ทารก</option>
+                <option value="elderly">ผู้สูงอายุ (60 ปีขึ้นไป)</option>
+                <option value="vulnerable">ผู้ป่วยโรคทางเดินหายใจ / ภูมิแพ้ / หัวใจ</option>
+                <option value="pregnant">หญิงตั้งครรภ์</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-bold">ระยะเวลาที่สัมผัสอากาศนี้ (ชั่วโมง/วัน)</label>
+              <input type="number" id="exposureHours" class="form-control" value="8" min="1" max="24" onchange="calculateHealthRisk()">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-bold">อาการผิดปกติปัจจุบัน (ถ้ามี)</label>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="sympCough" onchange="calculateHealthRisk()">
+                <label class="form-check-label small" for="sympCough">ไอ / ระคายคอ</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="sympEye" onchange="calculateHealthRisk()">
+                <label class="form-check-label small" for="sympEye">แสบตา / ตาแดง</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="sympBreath" onchange="calculateHealthRisk()">
+                <label class="form-check-label small" for="sympBreath">หายใจขัด / แน่นหน้าอก</label>
+              </div>
+            </div>
+
+            <div class="alert alert-info p-2 mt-auto mb-0" style="font-size: 0.8rem;">
+              <i class="bi bi-info-circle me-1"></i> ระบบจะนำค่า PM2.5, อุณหภูมิ และความชื้นจากเซ็นเซอร์มาประเมินร่วมกับโปรไฟล์นี้อัตโนมัติ
+            </div>
+          </div>
+        </div>
+
+        <!-- ฝั่งขวา: ผลการประเมินความเสี่ยง + คำแนะนำ -->
+        <div class="col-md-7">
+          
+          <!-- Card ผลการประเมินดัชนีความเสี่ยง -->
+          <div id="riskCard" class="card p-4 shadow-sm mb-4 risk-card bg-success text-white">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold uppercase"><i class="bi bi-shield-heart me-2"></i>ระดับความเสี่ยงสุขภาพของคุณ</span>
+              <span id="riskBadge" class="badge bg-light text-dark fs-6">ความเสี่ยงต่ำ 🟢</span>
+            </div>
+            <div class="display-5 fw-bold my-2" id="riskScoreText">ปกติ (Normal)</div>
+            <p class="m-0 opacity-90 small" id="riskDesc">
+              คุณภาพอากาศในห้องอยู่ในเกณฑ์ปลอดภัย ไม่ส่งผลกระทบต่อสุขภาพในกลุ่มของคุณ
             </p>
           </div>
-          <div class="col-md-4 text-md-end mt-3 mt-md-0">
-            <span class="badge bg-light text-primary fs-6 px-3 py-2 rounded-pill fw-bold">
-              ความเสี่ยงสะสม: ต่ำ 🟢
-            </span>
+
+          <!-- Card คำแนะนำรายบุคคล -->
+          <div class="card p-4 shadow-sm mb-4">
+            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-clipboard2-check text-success me-2"></i>คำแนะนำการปฏิบัติตนรายบุคคล</h6>
+            <ul class="list-group list-group-flush small" id="adviceList">
+              <li class="list-group-item px-0"><i class="bi bi-check-circle-fill text-success me-2"></i>สามารถทำกิจกรรมภายในห้องได้ตามปกติ</li>
+              <li class="list-group-item px-0"><i class="bi bi-check-circle-fill text-success me-2"></i>เปิดระบายอากาศภายนอกได้ช่วงสั้นๆ หากอากาศถ่ายเทสะดวก</li>
+            </ul>
           </div>
+
+          <!-- Card แนะนำการตั้งค่าเครื่องฟอก -->
+          <div class="card p-4 shadow-sm">
+            <h6 class="fw-bold text-dark mb-2"><i class="bi bi-sliders text-warning me-2"></i>คำแนะนำการตั้งค่าเครื่องฟอกอากาศ</h6>
+            <p class="small text-muted mb-3" id="purifierAdviseText">
+              ตั้งค่าเครื่องฟอกให้อยู่ในโหมดอัตโนมัติ (AUTO Mode) พัดลมจะปรับความเร็วตามระดับฝุ่นโดยอัตโนมัติ
+            </p>
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="setMode(true)">
+                <i class="bi bi-magic me-1"></i> สลับเป็นโหมด AUTO ทันที
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
-
-      <!-- 2. การ์ดพยากรณ์ล่วงหน้า 3 วัน -->
-      <h6 class="fw-bold text-dark mb-3"><i class="bi bi-calendar3 me-2"></i>คาดการณ์ PM2.5 ล่วงหน้า 3 วัน</h6>
-      <div class="row g-3 mb-4">
-        <div class="col-md-4">
-          <div class="card forecast-card p-3 shadow-sm border-start border-4 border-success">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="fw-bold text-dark">วันนี้</span>
-              <small class="text-muted">24 ก.ย.</small>
-            </div>
-            <div class="d-flex align-items-center my-2">
-              <i class="bi bi-sun text-warning fs-1 me-3"></i>
-              <div>
-                <div class="fs-4 fw-bold text-success">18 <small class="fs-6 text-muted">ug/m³</small></div>
-                <small class="text-success fw-semibold">คุณภาพอากาศดีมาก</small>
-              </div>
-            </div>
-            <small class="text-muted border-top pt-2 mt-1 d-block">
-              <i class="bi bi-wind me-1"></i> ลมตะวันออกเฉียงใต้ 12 กม./ชม.
-            </small>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <div class="card forecast-card p-3 shadow-sm border-start border-4 border-warning">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="fw-bold text-dark">พรุ่งนี้</span>
-              <small class="text-muted">25 ก.ย.</small>
-            </div>
-            <div class="d-flex align-items-center my-2">
-              <i class="bi bi-cloud-sun text-secondary fs-1 me-3"></i>
-              <div>
-                <div class="fs-4 fw-bold text-warning">42 <small class="fs-6 text-muted">ug/m³</small></div>
-                <small class="text-warning fw-semibold">ปานกลาง (เริ่มสะสม)</small>
-              </div>
-            </div>
-            <small class="text-muted border-top pt-2 mt-1 d-block">
-              <i class="bi bi-wind me-1"></i> ลมนิ่ง / การระบายอากาศนิ่ง
-            </small>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <div class="card forecast-card p-3 shadow-sm border-start border-4 border-danger">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="fw-bold text-dark">มะรืนนี้</span>
-              <small class="text-muted">26 ก.ย.</small>
-            </div>
-            <div class="d-flex align-items-center my-2">
-              <i class="bi bi-cloud-haze2 text-danger fs-1 me-3"></i>
-              <div>
-                <div class="fs-4 fw-bold text-danger">65 <small class="fs-6 text-muted">ug/m³</small></div>
-                <small class="text-danger fw-semibold">เริ่มมีผลกระทบ</small>
-              </div>
-            </div>
-            <small class="text-muted border-top pt-2 mt-1 d-block">
-              <i class="bi bi-exclamation-triangle text-danger me-1"></i> แนะนำเปิดเครื่องฟอกโหมด AUTO
-            </small>
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. กราฟแนวโน้มฝุ่นรายชั่วโมง (Hourly Forecast Chart) -->
-      <div class="card p-4 shadow-sm mb-4">
-        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-graph-up-arrow me-2"></i>คาดการณ์ระดับฝุ่นรายชั่วโมง (24 ชั่วโมงข้างหน้า)</h6>
-        <div style="position: relative; height:240px;">
-          <canvas id="forecastChart"></canvas>
-        </div>
-      </div>
-
-      <!-- 4. คำแนะนำการเตรียมตัวตามกลุ่มเสี่ยง -->
-      <div class="card p-4 shadow-sm">
-        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-heart-pulse me-2"></i>คำแนะนำปฏิบัติตนล่วงหน้า</h6>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <div class="p-3 bg-light rounded-3 h-100">
-              <div class="fw-bold text-primary mb-1"><i class="bi bi-person-heart me-1"></i> กลุ่มทั่วไป</div>
-              <small class="text-muted">สามารถทำกิจกรรมกลางแจ้งได้ตามปกติ หากฝุ่นเกิน 50 ug/m³ สวมหน้ากากอนามัยเมื่อออกนอกบ้าน</small>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="p-3 bg-light rounded-3 h-100">
-              <div class="fw-bold text-danger mb-1"><i class="bi bi-shield-exclamation me-1"></i> กลุ่มเปราะบาง (เด็ก / ผู้สูงอายุ / ภูมิแพ้)</div>
-              <small class="text-muted">แนะนำปิดประตูหน้าต่างช่วงเย็น และตั้งค่าเครื่องฟอกให้อยู่ในโหมดอัตโนมัติ (AUTO Mode) ตลอดคืน</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
     </div>
 
   </div>
@@ -380,21 +347,21 @@
     // ===== 1. Navigation Tab Switching =====
     function switchTab(tabName) {
       const deviceSec = document.getElementById('deviceSection');
-      const forecastSec = document.getElementById('forecastSection');
+      const healthSec = document.getElementById('healthSection');
       const tabDevice = document.getElementById('tabDevice');
-      const tabForecast = document.getElementById('tabForecast');
+      const tabHealth = document.getElementById('tabHealth');
 
       if (tabName === 'device') {
         deviceSec.style.display = 'block';
-        forecastSec.style.display = 'none';
+        healthSec.style.display = 'none';
         tabDevice.classList.add('active');
-        tabForecast.classList.remove('active');
-      } else if (tabName === 'forecast') {
+        tabHealth.classList.remove('active');
+      } else if (tabName === 'health') {
         deviceSec.style.display = 'none';
-        forecastSec.style.display = 'block';
-        tabForecast.classList.add('active');
+        healthSec.style.display = 'block';
         tabDevice.classList.remove('active');
-        initForecastChart(); // เรียกแสดงกราฟพยากรณ์
+        tabHealth.classList.add('active');
+        calculateHealthRisk(); // คำนวณความเสี่ยงทันทีเมื่อเปิดหน้านี้
       }
     }
 
@@ -406,7 +373,12 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    // ===== 3. ESP32 Connection Monitor (Heartbeat) =====
+    // ตัวแปรเก็บค่าเซ็นเซอร์ล่าสุดไว้ใช้คำนวณความเสี่ยง
+    let currentPM25 = 0;
+    let currentTemp = 0;
+    let currentHumid = 0;
+
+    // ===== 3. ESP32 Connection Monitor =====
     let lastSeenTime = 0;
     const offlineTimeoutMs = 10000;
 
@@ -423,7 +395,7 @@
       }
     }, 3000);
 
-    // ===== 4. Chart.js Initialization (Log Chart) =====
+    // ===== 4. Chart.js Initialization =====
     const ctx = document.getElementById('logChart').getContext('2d');
     const logChart = new Chart(ctx, {
       type: 'line',
@@ -473,41 +445,76 @@
       }
     });
 
-    // ===== 5. Forecast Chart Initialization =====
-    let forecastChart = null;
-    function initForecastChart() {
-      if (forecastChart) return;
+    // ===== 5. ระบบประเมินความเสี่ยงสุขภาพ (HEALTH RISK ALGORITHM) =====
+    function calculateHealthRisk() {
+      const group = document.getElementById('userGroup').value;
+      const hours = parseInt(document.getElementById('exposureHours').value) || 8;
+      const hasCough = document.getElementById('sympCough').checked;
+      const hasEye = document.getElementById('sympEye').checked;
+      const hasBreath = document.getElementById('sympBreath').checked;
 
-      const fCtx = document.getElementById('forecastChart').getContext('2d');
-      forecastChart = new Chart(fCtx, {
-        type: 'bar',
-        data: {
-          labels: ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00', '00:00', '03:00'],
-          datasets: [{
-            label: 'พยากรณ์ PM 2.5 (ug/m³)',
-            data: [15, 22, 28, 35, 48, 55, 40, 25],
-            backgroundColor: [
-              '#28a745', '#28a745', '#9ec55d', '#ffc107', '#fd7e14', '#dc3545', '#fd7e14', '#28a745'
-            ],
-            borderRadius: 6
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            y: { beginAtZero: true, grid: { color: '#e9ecef' } },
-            x: { grid: { display: false } }
-          },
-          plugins: {
-            legend: { display: false }
-          }
-        }
-      });
-    }
+      // ตัวคูณความเสี่ยงตามกลุ่มผู้ใช้งาน
+      let groupMultiplier = 1.0;
+      if (group === 'vulnerable') groupMultiplier = 1.8;
+      else if (group === 'child' || group === 'elderly' || group === 'pregnant') groupMultiplier = 1.4;
 
-    function refreshForecast() {
-      alert("อัปเดตข้อมูลพยากรณ์ล่าสุดเรียบร้อยแล้ว");
+      // คำนวณคะแนนความเสี่ยงฐานจาก PM2.5 และเวลาที่สัมผัส
+      let riskScore = (currentPM25 * groupMultiplier) * (hours / 8);
+
+      // บวกเพิ่มถ้ามีอาการผิดปกติ
+      if (hasCough) riskScore += 15;
+      if (hasEye) riskScore += 10;
+      if (hasBreath) riskScore += 30;
+
+      // อัปเดต UI ตามระดับความเสี่ยง
+      const riskCard = document.getElementById('riskCard');
+      const riskBadge = document.getElementById('riskBadge');
+      const riskScoreText = document.getElementById('riskScoreText');
+      const riskDesc = document.getElementById('riskDesc');
+      const adviceList = document.getElementById('adviceList');
+      const purifierAdviseText = document.getElementById('purifierAdviseText');
+
+      if (riskScore < 25) {
+        // ต่ำ / ปกติ
+        riskCard.className = "card p-4 shadow-sm mb-4 risk-card bg-success text-white";
+        riskBadge.innerText = "ความเสี่ยงต่ำ 🟢";
+        riskScoreText.innerText = "ปกติ (Low Risk)";
+        riskDesc.innerText = "คุณภาพอากาศในพื้นที่อยู่ในเกณฑ์ปลอดภัย ไม่ส่งผลกระทบต่อสุขภาพในกลุ่มของคุณ";
+        
+        adviceList.innerHTML = `
+          <li class="list-group-item px-0"><i class="bi bi-check-circle-fill text-success me-2"></i>ทำกิจกรรมในห้องได้ตามปกติ</li>
+          <li class="list-group-item px-0"><i class="bi bi-check-circle-fill text-success me-2"></i>เปิดระบายอากาศภายนอกได้หากอากาศถ่ายเทดี</li>
+        `;
+        purifierAdviseText.innerText = "สามารถเปิดเครื่องฟอกอากาศในโหมดเบา หรือตั้งค่า AUTO ไว้เพื่อรักษาคุณภาพอากาศ";
+
+      } else if (riskScore < 60) {
+        // ปานกลาง
+        riskCard.className = "card p-4 shadow-sm mb-4 risk-card bg-warning text-dark";
+        riskBadge.innerText = "ความเสี่ยงปานกลาง 🟡";
+        riskScoreText.innerText = "ปานกลาง (Moderate Risk)";
+        riskDesc.innerText = "สภาพอากาศเริ่มมีผลกระทบเล็กน้อย อาจระคายเคืองต่อกลุ่มเปราะบางหรือผู้ที่มีโรคประจำตัว";
+
+        adviceList.innerHTML = `
+          <li class="list-group-item px-0"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>ควรปิดประตูหน้าต่างเพื่อลดฝุ่นสะสมจากภายนอก</li>
+          <li class="list-group-item px-0"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>กลุ่มเปราะบาง/ผู้ป่วยภูมิแพ้ สวมหน้ากากอนามัยหากต้องออกนอกห้อง</li>
+          <li class="list-group-item px-0"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>จิบน้ำบ่อยๆ เพื่อบรรเทาอาการระคายคอ</li>
+        `;
+        purifierAdviseText.innerText = "แนะนำให้เปิดเครื่องฟอกอากาศในโหมด AUTO หรือปรับพัดลมความเร็ว 50-70%";
+
+      } else {
+        // สูง / อันตราย
+        riskCard.className = "card p-4 shadow-sm mb-4 risk-card bg-danger text-white";
+        riskBadge.innerText = "ความเสี่ยงสูง 🔴";
+        riskScoreText.innerText = "อันตรายต่อสุขภาพ (High Risk)";
+        riskDesc.innerText = "ปริมาณฝุ่นหรืออาการผิดปกติอยู่ในระดับสูง มีผลกระทบต่อระบบทางเดินหายใจอย่างชัดเจน";
+
+        adviceList.innerHTML = `
+          <li class="list-group-item px-0"><i class="bi bi-x-circle-fill text-danger me-2"></i>หลีกเลี่ยงการทำกิจกรรมที่ใช้แรงมากภายในห้อง</li>
+          <li class="list-group-item px-0"><i class="bi bi-x-circle-fill text-danger me-2"></i>ปิดห้องให้มิดชิด และเปิดเครื่องฟอกอากาศตลอดเวลา</li>
+          <li class="list-group-item px-0"><i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>หากมีอาการแน่นหน้าอก หายใจติดขัด ควรีบพบแพทย์ทันที</li>
+        `;
+        purifierAdviseText.innerText = "ควรเปิดเครื่องฟอกอากาศความเร็วแรงสุด (100% / MAX) ทันทีเพื่อเร่งกรองฝุ่นในห้อง";
+      }
     }
 
     // ===== 6. Control Functions =====
@@ -586,16 +593,23 @@
         statusElem.className = "badge bg-success status-badge";
         statusElem.innerText = "🟢 ESP32 ออนไลน์";
 
-        const pm25 = data.pm25 !== undefined ? data.pm25 : 0;
-        document.getElementById('pm25Val').innerText = pm25;
-        
-        updateAirQualityUI(pm25);
+        currentPM25 = data.pm25 !== undefined ? data.pm25 : 0;
+        currentTemp = data.temp !== undefined ? data.temp : 0;
+        currentHumid = data.humid !== undefined ? data.humid : 0;
+
+        document.getElementById('pm25Val').innerText = currentPM25;
+        updateAirQualityUI(currentPM25);
 
         document.getElementById('pm10Val').innerText = data.pm10 !== undefined ? data.pm10 : 0;
         document.getElementById('pm100Val').innerText = data.pm100 !== undefined ? data.pm100 : 0;
 
         document.getElementById('tempVal').innerText = (data.temp ? data.temp.toFixed(1) : "0.0") + " °C";
         document.getElementById('humidVal').innerText = (data.humid ? data.humid.toFixed(1) : "0.0") + " %";
+
+        // หากเปิดอยู่หน้าประเมินความเสี่ยง ให้คำนวณใหม่เมื่อค่าฝุ่นเปลี่ยน Realtime
+        if (document.getElementById('healthSection').style.display === 'block') {
+          calculateHealthRisk();
+        }
       }
     });
 
